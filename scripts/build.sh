@@ -47,6 +47,9 @@ COMMON_FLAGS=(
   -fno-common
   -DKERNEL
   -Wall -Wextra -Werror
+  # IOPCIDevice 등 kext API는 "Use PCIDriverKit"로 deprecated 표시돼 있다. 그러나 디스플레이 드라이버는
+  # DriverKit으로 만들 수 없어(REQUIREMENT §7) kext API를 써야 한다. 경고는 보이게 두고 오류로만 만들지 않는다.
+  -Wno-error=deprecated-declarations
   -I "$INC_DIR"
   -isystem "$KERNEL_HEADERS"
   "${OPT_FLAGS[@]}"

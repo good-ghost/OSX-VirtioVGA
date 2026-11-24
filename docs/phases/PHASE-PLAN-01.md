@@ -27,11 +27,13 @@ WI-1.002에서 아래 표를 채운다.
 
 | cfg_type | 이름        | BAR | offset | length | 비고 |
 | -------- | ----------- | --- | ------ | ------ | ---- |
-| 1        | common      |     |        |        |      |
-| 2        | notify      |     |        |        | notify_off_multiplier: |
-| 3        | isr         |     |        |        |      |
-| 4        | device      |     |        |        |      |
-| 5        | pci cfg     |     |        |        |      |
+| 1        | common      | 2   | 0x1000 | 0x800  | 설정 공간 0x84 |
+| 2        | notify      | 2   | 0x3000 | 0x1000 | notify_off_multiplier: 4 (0xb4) |
+| 3        | isr         | 2   | 0x1800 | 0x800  | 0x94 |
+| 4        | device      | 2   | 0x2000 | 0x1000 | 0xa4 |
+| 5        | pci cfg     | 0   | 0      | 0      | 0xc8, 설정 공간 창 |
+
+(WI-1.001 실측, kext 0.0.6. MSI-X cap 0xdc, 테이블 3, 부팅 직후 꺼짐. 장치 제공 feature 하위 32비트 `0x30000002`.)
 
 ## 3. 의존 관계와 실행 순서
 
@@ -125,3 +127,14 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 | MSI-X 활성화가 Apple 전송과 겹침                    | INTx·폴링 경로로 우선 진행, 원인 기록      |
 
 > 코드 예시는 의도를 보여 주는 스케치다. 실제 API 이름·시그니처는 SDK 헤더(`IOPCIDevice.h`)와 실측이 우선한다.
+
+## 7. 결정 기록
+
+### WI-1.001 (2026-11-24)
+
+- 공존(A)으로 진행. 근거와 실측은 [docs/research/apple-virtio-transport.md](../research/apple-virtio-transport.md).
+- 부팅 직후 장치 상태: `device_status=ACK(1)`, feature·큐·MSI-X 미설정. WI-1.003은 reset부터 시작한다.
+- 같은 카테고리·높은 점수로 Apple 드라이버를 밀어내는 방식은 로드 시점 때문에 실패했다 (T-05). 진단 서비스는 별도 카테고리로 되돌렸다 (kext 0.0.8, 미설치).
+- `vv/PciCapWalk.hpp`(capability 순회·검증)를 이번에 만들었다. WI-1.002는 이것을 전송 계층에 연결하는 작업이 된다.
+- 빌드: `IOPCIDevice`가 "Use PCIDriverKit"으로 deprecated라 `-Wno-error=deprecated-declarations`를 추가했다 (경고는 그대로 보인다).
+

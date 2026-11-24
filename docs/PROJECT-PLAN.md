@@ -86,7 +86,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 
 | Status | ID        | Description                                         | Man-day |
 | ------ | --------- | --------------------------------------------------- | ------- |
-| [ ]    | WI-1.001  | AppleVirtIOPCITransport 공존 조사                   | 1.5     |
+| [X]    | WI-1.001  | AppleVirtIOPCITransport 공존 조사                   | 1.5     |
 | [ ]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
 | [ ]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
 | [ ]    | WI-1.004  | split virtqueue                                     | 2       |
@@ -95,9 +95,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-1.007  | 전송 계층 통합 확인 (GET_DISPLAY_INFO 왕복)         | 1       |
 
 - WI-1.001
-  - [ ] Apple 전송 드라이버가 장치 상태 레지스터를 건드리는지(초기화·reset 여부) 조사한 결과를 `docs/research/`에 남겼다
-  - [ ] 공존 방법(그대로 둠 / 매칭 조정 / 우선 점유) 중 하나를 근거와 함께 정했다
-  - [ ] 결정이 REQ-003에 맞는지 확인했다
+  - [X] Apple 전송 드라이버가 장치 상태 레지스터를 건드리는지(초기화·reset 여부) 조사한 결과를 `docs/research/`에 남겼다 (`apple-virtio-transport.md`: status=ACK만, 큐·MSI-X·feature 미설정)
+  - [X] 공존 방법(그대로 둠 / 매칭 조정 / 우선 점유) 중 하나를 근거와 함께 정했다 — A(공존). 점수로 밀어내기는 로드 시점 때문에 실패(실측). 대안 C(kext 분리) 기록
+  - [X] 결정이 REQ-003에 맞는지 확인했다 — 세 서비스 동시 부착 상태로 부팅·화면 정상. 우리 초기화 후 상태 유지는 WI-1.003에서 확인
 - WI-1.002
   - [ ] vendor capability(`cfg_type` 1~5)를 모두 찾아 BAR·오프셋·길이를 로그로 남긴다
   - [ ] 범위가 BAR 크기를 넘는 capability를 거절하는 단위 테스트가 통과한다
@@ -366,3 +366,4 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | T-02 | NFR-003(언로드 후 재로드)은 OC 주입만 쓰기로 한 Q-01 결정과 함께 성립하는지 확인되지 않았다                                                   | WI-5.003 |
 | T-03 | REQ-043은 REQUIREMENT §11에서 P3과 P6 양쪽에 적혀 있다. 우선순위 C에 맞춰 P6(WI-6.001)에 배치했다                                            | —        |
 | T-04 | OC 주입 kext는 부트 kernel collection에 들어가고 IOGraphicsFamily는 시스템 collection에 있어, 이 드라이버는 시스템 collection 로드 후에 로드된다 (WI-0.002 실측). 부트 프레임버퍼 대체·부트 화면 이어받기에 영향이 있는지 확인 필요 | WI-2.006, WI-2.009 |
+| T-05 | AppleVirtIOPCITransport가 GPU 장치를 먼저 차지한다. 우리 kext는 늦게 로드되어(T-04) 같은 카테고리에서 점수로 밀어낼 수 없다(WI-1.001 실측). 공존 방식으로 진행하고, 우리 초기화 후 외부 reset이 관찰되면 kext 분리로 바꾼다 | WI-1.003, WI-1.006 |

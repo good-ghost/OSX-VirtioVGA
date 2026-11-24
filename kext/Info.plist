@@ -15,11 +15,24 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.5</string>
+	<string>0.0.8</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.5</string>
+	<string>0.0.8</string>
 	<key>IOKitPersonalities</key>
 	<dict>
+		<key>VirtioVideoPciProbe</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>local.virtiovideo.VirtioVideo</string>
+			<key>IOClass</key>
+			<string>VirtioVideoPciProbe</string>
+			<key>IOMatchCategory</key>
+			<string>VirtioVideoPciProbe</string>
+			<key>IOPCIMatch</key>
+			<string>0x10501af4</string>
+			<key>IOProviderClass</key>
+			<string>IOPCIDevice</string>
+		</dict>
 		<key>VirtioVideoProbe</key>
 		<dict>
 			<key>CFBundleIdentifier</key>

@@ -177,12 +177,14 @@ sudo shutdown -r now
 | `config.plist.bak-20261123-wi0004`    | WI-0.004 kext 재활성화 전         | VirtioVideo 항목 있음(Enabled=false), boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1001`    | WI-1.001 시험 전                  | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1007`    | WI-1.007 Poll 시험 전             | Enabled=true, boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-wi1006`    | WI-1.006 복구 시험 전             | Enabled=true, boot-args `keepsyms=1 vvideo_irq=2` |
 
 ## 7. 현재 상태 (2026-11-23)
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.15, UUID `2956D948-796A-39DE-88CB-7B817DA022A0` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 1회 주고받는다. 화면은 IONDRV가 그린다
-- **boot-args가 시험용 `keepsyms=1 vvideo_irq=2`(Poll)이다.** 다음 EFI 작업 때 `keepsyms=1`로 되돌린다 (백업 `config.plist.bak-20261124-wi1007`)
+- EFI의 kext 버전: 0.0.16, UUID `D9B760E9-2017-3BCA-AD2B-9BF8BA179042` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 화면은 IONDRV가 그린다
+- boot-args `keepsyms=1` (기본값으로 되돌림, 2026-11-24)
+- 디버그 boot-arg: `vvideo_log=0|1|2`(로그 수준), `vvideo_irq=0|1|2`(MSI-X/INTx/Poll), `vvideo_test_reset=1`(30초 뒤 외부 reset 흉내), `-vvideooff`(드라이버 끄기)
 - boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

@@ -18,13 +18,19 @@
 //   요청한 방식의 소스가 없으면 MSI-X → INTx → Poll 순으로 내려간다.
 // 모든 처리는 이 서비스의 워크루프에서 직렬화된다.
 //
-// 주기 타이머로 장치 상태가 외부에서 바뀌지 않는지 감시한다 (T-05).
+// 주기 타이머로 장치 상태를 감시한다 (T-05). DEVICE_NEEDS_RESET이 오르거나 DRIVER_OK가 사라지거나 명령이
+// 시간 초과되면 reset 후 처음부터 다시 올린다 (WI-1.006, REQ-017). 복구는 시작 한 번에 kMaxRecoveries회까지만 하고,
+// 넘으면 장치를 FAILED로 두고 손을 뗀다. 복구 뒤 GET_DISPLAY_INFO를 워크루프 밖(thread_call)에서 다시 보내
+// 명령 경로까지 살아났는지 확인한다. boot-arg `vvideo_test_reset=1`이면 시작 30초 뒤 외부 reset을 흉내 내 복구 경로를 시험한다.
 // P1 동안은 디버깅을 위해 초기화에 실패해도 start()가 true를 돌려 객체를 남기고 결과를 VV* 속성으로 공개한다.
 // P2에서 프레임버퍼와 연결할 때는 실패 시 false를 돌려준다 (REQ-005).
 #pragma once
 
 #include <IOKit/IOService.h>
 
+#include <kern/thread_call.h>
+
+#include "vv/DeviceHealth.hpp"
 #include "vv/VirtioIrq.hpp"
 
 class IOCommandGate;
@@ -49,7 +55,12 @@ public:
 private:
     static constexpr unsigned kQueueCount = 2;
 
-    bool initializeDevice();
+    bool bringUpDevice(const char **failureReason);
+    void recoverDevice(const char *reason);
+    void giveUpDevice(const char *reason);
+    void releaseQueues();
+    static void deferredDisplayQuery(thread_call_param_t owner, thread_call_param_t);
+    static void testResetFired(OSObject *owner, IOTimerEventSource *sender);
     bool prepareInterrupts();
     bool prepareMsix();
     bool prepareIntx();
@@ -107,6 +118,12 @@ private:
 
     IOTimerEventSource *mStatusTimer = nullptr;
     IOTimerEventSource *mPollTimer = nullptr;
+    IOTimerEventSource *mTestResetTimer = nullptr;
+    thread_call_t mDisplayQueryCall = nullptr;
+    volatile SInt32 mDisplayQueryActive = 0;  // 실행 중인 deferredDisplayQuery 수. stop에서 0이 될 때까지 기다린다
+    bool mStopping = false;
+    uint32_t mRecoveries = 0;
+    bool mGivenUp = false;
     uint8_t mExpectedStatus = 0;
     uint32_t mStatusChecks = 0;
     uint32_t mStatusMismatches = 0;

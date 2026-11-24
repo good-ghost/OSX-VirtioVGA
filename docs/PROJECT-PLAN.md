@@ -91,7 +91,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
 | [X]    | WI-1.004  | split virtqueue                                     | 2       |
 | [X]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
-| [ ]    | WI-1.006  | 장치 reset 처리와 전송 클래스 분리                  | 1       |
+| [X]    | WI-1.006  | 장치 reset 처리와 전송 클래스 분리                  | 1       |
 | [X]    | WI-1.007  | 전송 계층 통합 확인 (GET_DISPLAY_INFO 왕복)         | 1       |
 
 - WI-1.001
@@ -116,8 +116,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다 — **이 장치에서는 시험 불가**: 레거시 인터럽트 소스가 없다(IOPCIMessagedInterruptController만). 코드는 있고, `vvideo_irq=1`이면 Poll로 내려간다
   - [X] 폴링 모드 디버그 옵션에서 인터럽트 없이 동작한다 — `vvideo_irq=2`에서 GET_DISPLAY_INFO 왕복 성공(interrupts=0, completions=1)
 - WI-1.006
-  - [ ] `DEVICE_NEEDS_RESET`을 감지하면 reset 후 재초기화 경로를 탄다 (폴링 모드에서 강제로 시험)
-  - [ ] 전송 계층이 GPU 코드와 분리된 클래스로 있다
+  - [X] `DEVICE_NEEDS_RESET`을 감지하면 reset 후 재초기화 경로를 탄다 (폴링 모드에서 강제로 시험) — 같은 복구 경로를 boot-arg `vvideo_test_reset=1`의 외부 reset 흉내(Lost)로 실기 확인. NEEDS_RESET 비트 판정은 단위 테스트 (QEMU에서 이 비트를 일으킬 방법이 없다)
+  - [X] 전송 계층이 GPU 코드와 분리된 클래스로 있다 (`VirtioPciTransport`, `VirtioQueue`, `VVDmaBuffer` / GPU는 `VirtioGpuDevice`)
 - WI-1.007
   - [X] `GET_DISPLAY_INFO` 요청과 응답이 한 번 왕복하고 scanout 0의 1280×800이 로그에 남는다 (MSI-X, Poll 두 방식)
   - [X] kext를 실은 채 부팅해도 화면은 여전히 `IONDRVFramebuffer`로 정상이다 (매칭은 아직 하지 않음) — 명령을 받은 뒤에도 QEMU는 VGA 출력 유지

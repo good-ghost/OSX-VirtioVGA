@@ -39,6 +39,12 @@ constexpr size_t kSummaryBytes = 128;
 constexpr uint32_t kCommandTimeoutMs = 1000;
 // 명령 버퍼: 앞쪽에 요청, kResponseOffset부터 응답. 가장 큰 응답(RespEdid, 1056바이트)도 들어간다.
 constexpr uint32_t kCommandBufferBytes = PAGE_SIZE;
+// 복구 경로 시험용 boot-arg와 지연 (WI-1.006). 부팅이 끝나고 상태 감시가 돌기 시작한 뒤에 흉내 낸다.
+constexpr const char *kTestResetBootArg = "vvideo_test_reset";
+constexpr uint32_t kTestResetDelayMs = 30000;
+// stop에서 실행 중인 확인 명령이 끝나기를 기다리는 한도. 명령 기한(kCommandTimeoutMs)보다 넉넉히 잡는다.
+constexpr uint32_t kDisplayQueryDrainMs = 3000;
+constexpr uint32_t kDrainPollMs = 1;
 constexpr uint32_t kResponseOffset = 1024;
 constexpr uint32_t kMaxRequestBytes = kResponseOffset;
 static_assert(sizeof(v::gpu::RespEdid) <= kCommandBufferBytes - kResponseOffset, "응답 영역이 가장 큰 응답보다 작다");
@@ -53,6 +59,12 @@ uint32_t high32(uint64_t value)
 uint32_t low32(uint64_t value)
 {
     return static_cast<uint32_t>(value);
+}
+
+bool testResetRequested()
+{
+    int value = 0;
+    return PE_parse_boot_argn(kTestResetBootArg, &value, sizeof(value)) && value != 0;
 }
 
 v::IrqMode irqModeFromBootArgs()
@@ -112,23 +124,39 @@ bool VirtioGpuDevice::start(IOService *provider)
         failDevice("command-setup");
         return true;
     }
-    if (initializeDevice()) {
-        enableInterrupts();
-        startTimers();
-        queryDisplayInfo();
+    mDisplayQueryCall = thread_call_allocate(&VirtioGpuDevice::deferredDisplayQuery, this);
+    if (mDisplayQueryCall == nullptr) {
+        failDevice("thread-call");
+        return true;
     }
+    if (!prepareInterrupts()) {
+        failDevice("interrupts");
+        return true;
+    }
+    const char *failure = nullptr;
+    if (!bringUpDevice(&failure)) {
+        failDevice(failure);
+        return true;
+    }
+    enableInterrupts();
+    startTimers();
+    queryDisplayInfo();
     publishCounters();
     vv::publishLog(this);
     return true;
 }
 
-bool VirtioGpuDevice::initializeDevice()
+bool VirtioGpuDevice::bringUpDevice(const char **failureReason)
 {
-    VV_LOG_INFO("gpu: status before reset=0x%02x", mTransport->status());
-    // §3.1.1 1단계: reset. 펌웨어나 Apple 전송 드라이버가 남긴 상태(관찰값 ACK)를 가정하지 않는다.
-    if (!mTransport->reset()) {
-        failDevice("reset");
+    // §3.1.1 순서대로 장치를 올린다. 처음 시작과 복구(WI-1.006)에서 같이 쓴다. 인터럽트 소스는 미리 만들어 둔다.
+    auto fail = [failureReason](const char *reason) {
+        *failureReason = reason;
         return false;
+    };
+    VV_LOG_INFO("gpu: status before reset=0x%02x", mTransport->status());
+    // 1단계: reset. 펌웨어나 Apple 전송 드라이버가 남긴 상태(관찰값 ACK)를 가정하지 않는다.
+    if (!mTransport->reset()) {
+        return fail("reset");
     }
     mTransport->addStatus(v::status::kAcknowledge);
     mTransport->addStatus(v::status::kDriver);
@@ -140,12 +168,10 @@ bool VirtioGpuDevice::initializeDevice()
     const auto negotiation = v::negotiateFeatures(deviceFeatures);
     setProperty("VVNegotiation", v::negotiationErrorName(negotiation.error));
     if (negotiation.error != v::NegotiationError::None) {
-        failDevice(v::negotiationErrorName(negotiation.error));
-        return false;
+        return fail(v::negotiationErrorName(negotiation.error));
     }
     if (!mTransport->writeDriverFeatures(negotiation.driverFeatures)) {
-        failDevice("write-features");
-        return false;
+        return fail("write-features");
     }
     const uint64_t readBack = mTransport->readDriverFeatures();
     setProperty("VVDriverFeatures", readBack, 64);
@@ -153,34 +179,107 @@ bool VirtioGpuDevice::initializeDevice()
                 low32(negotiation.driverFeatures));
 
     mTransport->addStatus(v::status::kFeaturesOk);
-    // §3.1.1 6단계: FEATURES_OK를 다시 읽어 장치가 feature 조합을 받아들였는지 확인한다.
+    // 6단계: FEATURES_OK를 다시 읽어 장치가 feature 조합을 받아들였는지 확인한다.
     const uint8_t status = mTransport->status();
     if ((status & v::status::kFeaturesOk) == 0) {
-        failDevice("features-not-accepted");
-        return false;
+        return fail("features-not-accepted");
     }
     VV_LOG_INFO("gpu: FEATURES_OK accepted, status=0x%02x", status);
 
-    if (!prepareInterrupts()) {
-        failDevice("interrupts");
-        return false;
+    // 벡터는 reset 때마다 NO_VECTOR로 돌아가므로 매번 다시 쓴다. MSI-X가 아니면 NO_VECTOR로 둔다.
+    if (!mTransport->setConfigVector(v::configVectorFor(mIrqMode))) {
+        VV_LOG_ERR("gpu: config vector 0x%x not accepted", v::configVectorFor(mIrqMode));
+        return fail("config-vector");
     }
     if (!setupQueues()) {
-        failDevice("queues");
-        return false;
+        return fail("queues");
     }
-    // §3.1.1 8단계: 장치별 설정(큐)을 마친 뒤 DRIVER_OK. 이 뒤로 장치는 큐를 쓸 수 있다.
+    // 8단계: 장치별 설정(큐)을 마친 뒤 DRIVER_OK. 이 뒤로 장치는 큐를 쓸 수 있다.
     mTransport->addStatus(v::status::kDriverOk);
     const uint8_t live = mTransport->status();
-    if ((live & v::status::kDriverOk) == 0 || (live & v::status::kDeviceNeedsReset) != 0) {
-        failDevice("driver-ok");
-        return false;
+    if (v::classifyStatus(live) != v::DeviceHealth::Ok) {
+        return fail("driver-ok");
     }
     mExpectedStatus = live;
     setProperty("VVInitResult", "driver-ok");
     setProperty("VVDeviceStatus", live, 8);
     VV_LOG_INFO("gpu: DRIVER_OK, status=0x%02x irq=%s", live, v::irqModeName(mIrqMode));
     return true;
+}
+
+void VirtioGpuDevice::releaseQueues()
+{
+    for (VirtioQueue *&queue : mQueues) {
+        if (queue != nullptr) {
+            queue->release();
+            queue = nullptr;
+        }
+    }
+}
+
+void VirtioGpuDevice::recoverDevice(const char *reason)
+{
+    // 워크루프 문맥(타이머, 인터럽트 처리기, 게이트 안)에서만 부른다.
+    if (mGivenUp || mTransport == nullptr) {
+        return;
+    }
+    if (!v::mayRecover(mRecoveries)) {
+        giveUpDevice("recovery-limit");
+        return;
+    }
+    ++mRecoveries;
+    setProperty("VVRecoveries", mRecoveries, 32);
+    setProperty("VVLastRecoveryReason", reason);
+    VV_LOG_ERR("gpu: recovering device (%s), attempt %u/%u", reason, mRecoveries, v::kMaxRecoveries);
+
+    // 장치가 큐 메모리를 더 쓰지 않도록 먼저 reset하고, 걸려 있던 명령은 버린다.
+    mTransport->reset();
+    if (mCommandInFlight) {
+        mCommandInFlight = false;
+        mCommandDone = true;
+        mGate->commandWakeup(&mCommandDone);
+    }
+    releaseQueues();
+
+    const char *failure = nullptr;
+    if (!bringUpDevice(&failure)) {
+        VV_LOG_ERR("gpu: recovery bring-up failed: %s", failure);
+        giveUpDevice(failure);
+        return;
+    }
+    VV_LOG_INFO("gpu: recovery %u done", mRecoveries);
+    // 게이트 안에서는 명령 완료를 기다릴 수 없으므로(게이트 재진입), 확인용 명령은 워크루프 밖에서 보낸다.
+    thread_call_enter(mDisplayQueryCall);
+    vv::publishLog(this);
+}
+
+void VirtioGpuDevice::giveUpDevice(const char *reason)
+{
+    // 타이머 처리기 안에서도 부를 수 있으므로 이벤트 소스는 건드리지 않는다. 장치를 FAILED로 두고 큐를 놓는다.
+    mGivenUp = true;
+    VV_LOG_ERR("gpu: giving up on device: %s", reason);
+    setProperty("VVInitResult", reason);
+    if (mTransport != nullptr) {
+        mTransport->addStatus(v::status::kFailed);
+        mTransport->reset();
+    }
+    if (mCommandInFlight) {
+        mCommandInFlight = false;
+        mCommandDone = true;
+        mGate->commandWakeup(&mCommandDone);
+    }
+    releaseQueues();
+    vv::publishLog(this);
+}
+
+void VirtioGpuDevice::deferredDisplayQuery(thread_call_param_t owner, thread_call_param_t)
+{
+    auto *self = static_cast<VirtioGpuDevice *>(owner);
+    OSIncrementAtomic(&self->mDisplayQueryActive);
+    if (!self->mStopping) {
+        self->queryDisplayInfo();
+    }
+    OSDecrementAtomic(&self->mDisplayQueryActive);
 }
 
 void VirtioGpuDevice::findInterruptSources()
@@ -217,11 +316,7 @@ bool VirtioGpuDevice::prepareInterrupts()
     if (mIrqMode == v::IrqMode::Intx && !prepareIntx()) {
         return false;
     }
-    // MSI-X가 아니면 장치가 ISR/INTx를 쓰도록 config 벡터를 NO_VECTOR로 둔다 (reset 직후 기본값이지만 명시한다).
-    if (!mTransport->setConfigVector(v::configVectorFor(mIrqMode))) {
-        VV_LOG_ERR("gpu: config vector 0x%x not accepted", v::configVectorFor(mIrqMode));
-        return false;
-    }
+    // 장치에 벡터를 쓰는 것은 bringUpDevice에서 한다 (reset 때마다 다시 써야 하므로).
     setProperty("VVIrqMode", v::irqModeName(mIrqMode));
     setProperty("VVIrqSharedVector", mIrqMode == v::IrqMode::MsiX && !v::usesSeparateVectors(mMsixSourceCount));
     return true;
@@ -360,7 +455,9 @@ void VirtioGpuDevice::handleQueueEvent(unsigned queue)
         if (result == v::SplitRing::CollectResult::DeviceError) {
             ++mDeviceErrors;
             VV_LOG_ERR("gpu: queue %u returned out-of-range used id", queue);
-            break;
+            // 링 상태를 더 믿을 수 없다. 복구가 큐를 새로 만들므로 이 반복은 여기서 끝낸다.
+            recoverDevice("used-id-out-of-range");
+            return;
         }
         ++mCompletions[queue];
         if (queue == v::gpu::kControlQueue && mCommandInFlight && completion.head == mCommandHead) {
@@ -375,6 +472,12 @@ void VirtioGpuDevice::handleConfigEvent()
 {
     using Gpu = v::gpu::Config;
     ++mConfigEvents;
+    // §2.1.2: 장치는 DEVICE_NEEDS_RESET을 올릴 때 config 변경 알림을 보낸다.
+    const auto health = v::classifyStatus(mTransport->status());
+    if (health != v::DeviceHealth::Ok) {
+        recoverDevice(v::deviceHealthName(health));
+        return;
+    }
     const uint32_t events = mTransport->deviceRead32(offsetof(Gpu, eventsRead));
     if (events != 0) {
         VV_LOG_INFO("gpu: config event 0x%x (display=%d)", events, (events & v::gpu::kEventDisplay) != 0);
@@ -513,7 +616,13 @@ IOReturn VirtioGpuDevice::gatedSubmit(OSObject *owner, void *request, void *resp
     if (!self->mCommandDone) {
         ++self->mCommandTimeouts;
         VV_LOG_ERR("gpu: command timed out after %u ms (head %u)", kCommandTimeoutMs, head);
+        // 장치가 명령을 쥐고 있어 링을 더 쓸 수 없다. reset으로 되찾는다 (게이트 안이라 확인 명령은 미뤄진다).
+        self->recoverDevice("command-timeout");
         return kIOReturnTimeout;
+    }
+    if (!self->mCommandInFlight) {
+        // 기다리는 사이 복구가 일어나 명령이 버려졌다.
+        return kIOReturnAborted;
     }
     self->mCommandInFlight = false;
     bcopy(buffer + kResponseOffset, response, responseBytes);
@@ -585,12 +694,7 @@ void VirtioGpuDevice::releaseDevice()
     if (mWorkLoop != nullptr) {
         releaseInterrupts();
     }
-    for (VirtioQueue *&queue : mQueues) {
-        if (queue != nullptr) {
-            queue->release();
-            queue = nullptr;
-        }
-    }
+    releaseQueues();
     if (mTransport != nullptr) {
         mTransport->release();
         mTransport = nullptr;
@@ -629,6 +733,13 @@ void VirtioGpuDevice::startTimers()
     } else {
         mStatusTimer->setTimeoutMS(kStatusWatchIntervalMs);
     }
+    if (testResetRequested()) {
+        mTestResetTimer = IOTimerEventSource::timerEventSource(this, &VirtioGpuDevice::testResetFired);
+        if (mTestResetTimer != nullptr && mWorkLoop->addEventSource(mTestResetTimer) == kIOReturnSuccess) {
+            mTestResetTimer->setTimeoutMS(kTestResetDelayMs);
+            VV_LOG_INFO("gpu: test reset scheduled in %u ms", kTestResetDelayMs);
+        }
+    }
     if (mIrqMode != v::IrqMode::Poll) {
         return;
     }
@@ -642,7 +753,7 @@ void VirtioGpuDevice::startTimers()
 
 void VirtioGpuDevice::stopTimers()
 {
-    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer};
+    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer, &mTestResetTimer};
     for (IOTimerEventSource **timer : timers) {
         if (*timer == nullptr) {
             continue;
@@ -665,6 +776,18 @@ void VirtioGpuDevice::statusTimerFired(OSObject *owner, IOTimerEventSource *send
     sender->setTimeoutMS(kStatusWatchIntervalMs);
 }
 
+void VirtioGpuDevice::testResetFired(OSObject *owner, IOTimerEventSource *)
+{
+    // 외부 reset을 흉내 낸다: 드라이버 상태를 그대로 둔 채 장치만 reset한다. 상태 감시가 이를 Lost로 보고 복구해야 한다.
+    auto *self = OSDynamicCast(VirtioGpuDevice, owner);
+    if (self == nullptr || self->mTransport == nullptr || self->mGivenUp) {
+        return;
+    }
+    VV_LOG_INFO("gpu: test: simulating external device reset");
+    self->setProperty("VVTestResetDone", true);
+    self->mTransport->reset();
+}
+
 void VirtioGpuDevice::checkStatus()
 {
     if (mTransport == nullptr) {
@@ -672,11 +795,14 @@ void VirtioGpuDevice::checkStatus()
     }
     const uint8_t status = mTransport->status();
     ++mStatusChecks;
-    if (status != mExpectedStatus) {
-        // 처음 바뀐 순간만 로그로 남기고, 새 값을 기준으로 다시 감시한다.
+    if (status != mExpectedStatus && !mGivenUp) {
         ++mStatusMismatches;
         VV_LOG_ERR("gpu: device status changed externally 0x%02x -> 0x%02x", mExpectedStatus, status);
         mExpectedStatus = status;
+        const auto health = v::classifyStatus(status);
+        if (health != v::DeviceHealth::Ok) {
+            recoverDevice(v::deviceHealthName(health));
+        }
         vv::publishLog(this);
     }
     setProperty("VVDeviceStatus", status, 8);
@@ -703,14 +829,28 @@ void VirtioGpuDevice::publishCounters()
     char summary[kSummaryBytes];
     snprintf(summary, sizeof(summary),
              "interrupts=%u config=%u controlq=%u cursorq=%u completions=%u/%u device-errors=%u commands=%u "
-             "timeouts=%u",
+             "timeouts=%u recoveries=%u",
              mInterrupts, mConfigEvents, mQueueEvents[0], mQueueEvents[1], mCompletions[0], mCompletions[1],
-             mDeviceErrors, mCommandsSent, mCommandTimeouts);
+             mDeviceErrors, mCommandsSent, mCommandTimeouts, mRecoveries);
     setProperty("VVEventCounters", summary);
 }
 
 void VirtioGpuDevice::stop(IOService *provider)
 {
+    mStopping = true;
+    if (mDisplayQueryCall != nullptr) {
+        // 대기 중인 확인 명령은 취소하고, 이미 실행 중이면 끝날 때까지 기다린다.
+        // (thread_call_cancel_wait는 com.apple.kpi.private라 서드파티 kext가 쓸 수 없다.)
+        thread_call_cancel(mDisplayQueryCall);
+        for (uint32_t waited = 0; mDisplayQueryActive != 0 && waited < kDisplayQueryDrainMs; waited += kDrainPollMs) {
+            IOSleep(kDrainPollMs);
+        }
+        if (mDisplayQueryActive != 0 || !thread_call_free(mDisplayQueryCall)) {
+            // 해제하지 못하면 메모리를 남기는 쪽을 택한다 (실행 중인 호출이 해제된 객체를 쓰는 것보다 안전).
+            VV_LOG_ERR("gpu: display query call still active at stop, leaking it");
+        }
+        mDisplayQueryCall = nullptr;
+    }
     // 장치를 다른 드라이버(또는 다음 부팅)가 처음부터 쓸 수 있게 reset해 둔다.
     releaseDevice();
     VV_LOG_INFO("gpu: stop");

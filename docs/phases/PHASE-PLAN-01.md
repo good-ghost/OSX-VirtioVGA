@@ -255,3 +255,33 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 - PHASE-PLAN의 "10회 재부팅" 반복은 하지 않았다. 이번 Phase 동안 재부팅 약 15회에서 초기화 실패 1회(0.0.12, `configureInterrupts` 미지원 — 원인 수정됨) 외에는 같은 결과였다.
 - 남은 설정: OpenCore boot-args가 시험용 `keepsyms=1 vvideo_irq=2`(Poll)이다. 다음 EFI 작업 때 `keepsyms=1`로 되돌린다.
 
+### WI-1.006 (2026-11-24) — P1 완료
+
+구현 (kext 0.0.16)
+
+- `vv/DeviceHealth.hpp`: 상태 판정 `NeedsReset`(DEVICE_NEEDS_RESET) / `Lost`(DRIVER_OK 없음) / `Ok`, 복구 한도 `kMaxRecoveries=3`. 테스트 4개.
+- `VirtioGpuDevice`: reset~DRIVER_OK를 `bringUpDevice`로 분리해 시작·복구에서 같이 쓴다 (벡터는 reset마다 다시 쓴다). 인터럽트 소스는 시작 때 한 번 만든다.
+- 복구 계기: 상태 감시(2초)에서 Lost·NeedsReset, config 인터럽트(§2.1.2 NEEDS_RESET 알림), 명령 시간 초과, used 링의 범위 밖 id. 복구 순서: reset → 걸린 명령 버림(대기자 깨움) → 큐 해제 → `bringUpDevice`. 한도를 넘거나 다시 올리기에 실패하면 FAILED로 두고 손을 뗀다 (화면은 IONDRV가 계속 그린다).
+- 복구 뒤 확인 명령(`GET_DISPLAY_INFO`)은 게이트 재진입을 피하려고 `thread_call`로 워크루프 밖에서 보낸다. stop에서는 `thread_call_cancel` 후 실행 중인 호출이 끝나기를 카운터로 기다린다.
+- `thread_call_cancel_wait`가 `com.apple.kpi.private`(서드파티 사용 불가)임을 build.sh 의존성 검사가 잡았다. 공개 API로 바꾸고, build.sh가 `kpi.private` 사용을 거부하도록 했다.
+- 시험용 boot-arg `vvideo_test_reset=1`: 시작 30초 뒤 장치만 reset해 외부 reset을 흉내 낸다.
+
+실기 확인 (boot-args `keepsyms=1 vvideo_test_reset=1`, MSI-X)
+
+| 단계 | 결과 |
+| ---- | ---- |
+| 첫 초기화 | DRIVER_OK `0x0f`, GET_DISPLAY_INFO `1280x800` |
+| 30초 뒤 외부 reset 흉내 | 상태 `0x0f -> 0x00` 감지, `lost`로 판정 |
+| 복구 1/3 | feature 재협상, 큐 2개 재등록, DRIVER_OK `0x0f` |
+| 복구 뒤 확인 명령 | thread_call로 GET_DISPLAY_INFO 재전송, `1280x800` |
+| 카운터 | `interrupts=2 controlq=2 completions=2 commands=2 timeouts=0 recoveries=1` |
+| 화면·패닉 | 화면 유지, 새 패닉 없음 |
+
+확인하지 못한 것: 실제 `DEVICE_NEEDS_RESET` 비트(QEMU에서 일으킬 방법이 없음), 명령 시간 초과로 시작되는 복구(장치가 항상 응답함). 두 경우 모두 같은 `recoverDevice` 경로를 탄다.
+
+## 8. P1 정리
+
+- WI-1.001~1.007 완료. 전송 계층(`VirtioPciTransport`, `VirtioQueue`, `VVDmaBuffer`)과 GPU 장치 서비스(`VirtioGpuDevice`)로 실제 장치와 명령을 주고받고, 이상이 생기면 스스로 복구한다.
+- P2로 넘길 사항: T-01(프레임버퍼 물리 연속성) — `VVDmaBuffer`가 물리 연속 할당을 하므로 큰 크기에서 성공하는지가 관건. T-04/T-05(로드 시점, Apple 전송과 공존) — 부트 프레임버퍼 대체(WI-2.006)에 영향. 명령 계층(WI-2.001)은 이번 `submitCommand`를 출발점으로 한다.
+- 화면 출력은 아직 IONDRV이고, QEMU는 virtio-gpu 명령을 받아도 VGA 출력을 유지했다.
+

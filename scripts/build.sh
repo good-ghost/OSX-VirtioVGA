@@ -104,6 +104,11 @@ required_libraries="$(kmutil libraries -p "$BUNDLE" --xml 2>/dev/null \
   | awk -F'[<>]' '/<key>/ { print $3 }')"
 missing=""
 for library in $required_libraries; do
+  # Apple 내부용 KPI는 서드파티 kext가 쓸 수 없다 (WI-1.006에서 thread_call_cancel_wait로 발견).
+  if [ "$library" = "com.apple.kpi.private" ]; then
+    echo "Apple 내부용 KPI(com.apple.kpi.private)를 쓰는 심볼이 있다. kmutil libraries -p로 찾아 공개 API로 바꾼다" >&2
+    exit 1
+  fi
   /usr/libexec/PlistBuddy -c "Print :OSBundleLibraries:$library" "$INFO_PLIST" >/dev/null 2>&1 || missing="$missing $library"
 done
 if [ -n "$missing" ]; then

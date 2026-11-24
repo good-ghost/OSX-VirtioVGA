@@ -184,6 +184,20 @@ void VirtioGpuDevice::queryDisplayInfo()
         used += static_cast<size_t>(n);
     }
     setProperty("VVDisplayInfo", summary);
+
+    // WI-2.002: scanout 0의 선호 해상도. 꺼져 있거나 0이거나 상한(2560×1600)을 넘으면 1280×800을 쓴다.
+    if (scanouts > 0) {
+        const auto preferred = vv::display::preferredModeFrom(response.pmodes[0]);
+        mPreferredMode = preferred.mode;
+        char modeSummary[kSummaryBytes];
+        snprintf(modeSummary, sizeof(modeSummary), "%ux%u%s", preferred.mode.width, preferred.mode.height,
+                 preferred.fallbackUsed ? " (fallback)" : "");
+        setProperty("VVPreferredMode", modeSummary);
+        if (preferred.fallbackUsed) {
+            VV_LOG_INFO("gpu: scanout 0 preferred %ux%u unusable, using fallback %ux%u", response.pmodes[0].r.width,
+                        response.pmodes[0].r.height, preferred.mode.width, preferred.mode.height);
+        }
+    }
     vv::publishLog(this);
 }
 

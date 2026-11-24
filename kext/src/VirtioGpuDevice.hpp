@@ -31,6 +31,7 @@
 #include <kern/thread_call.h>
 
 #include "vv/DeviceHealth.hpp"
+#include "vv/DisplayMode.hpp"
 #include "vv/GpuCommand.hpp"
 #include "vv/VirtioIrq.hpp"
 
@@ -92,6 +93,8 @@ private:
                                vv::virtio::gpu::CommandResult *resultOut = nullptr);
     void queryDisplayInfo();
     void runSelfTest();
+    bool allocateFramebuffer(const vv::display::Mode &mode);
+    void probeContiguousAllocation();
 
     void handleQueueEvent(unsigned queue);
     void handleConfigEvent();
@@ -116,6 +119,10 @@ private:
     IOInterruptEventSource *mMsixSources[vv::virtio::kSeparateMsixVectors] = {};
     IOFilterInterruptEventSource *mIntxSource = nullptr;
     volatile uint32_t mIntxPendingIsr = 0;  // 필터(1차 인터럽트 문맥)가 쌓고 워크루프가 비운다
+
+    vv::display::Mode mPreferredMode = vv::display::kFallbackMode;
+    VVDmaBuffer *mFramebuffer = nullptr;  // 현재 모드의 프레임버퍼 (WI-2.003). 풀 상한 kFramebufferPoolBytes
+    vv::display::Mode mFramebufferMode{};
 
     IOCommandGate *mGate = nullptr;
     VVDmaBuffer *mCommandBuffer = nullptr;  // 요청·응답을 담는 장치 공유 메모리

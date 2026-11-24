@@ -183,7 +183,7 @@ sudo shutdown -r now
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.17, UUID `544ADAEC-CF6A-3F28-B935-76CF9AFDD641` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
+- EFI의 kext 버전: 0.0.18, UUID `31654AC5-A594-3B14-8F2B-CCA02D0185BF` (dSYM은 `build/dsym-archive/`). 시작 때 선호 모드 프레임버퍼(물리 연속)를 할당해 둔다. `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
 - boot-args `keepsyms=1` (기본값으로 되돌림, 2026-11-24)
 - 디버그 boot-arg: `vvideo_log=0|1|2`(로그 수준), `vvideo_irq=0|1|2`(MSI-X/INTx/Poll), `vvideo_test_reset=1`(30초 뒤 외부 reset 흉내), `-vvideooff`(드라이버 끄기)
 - boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)

@@ -16,6 +16,9 @@ public:
 
     void *cpuAddress() const { return mCpuAddress; }
     uint64_t deviceAddress() const { return mDeviceAddress; }
+    // CPU 물리 주소 (IOMMU를 거치지 않은 값). IOFramebuffer의 aperture(IODeviceMemory)는 물리 주소 범위로 만든다(T-01).
+    // 전체가 한 덩어리로 연속이 아니면 0.
+    uint64_t physicalAddress() const { return mPhysicalAddress; }
     size_t length() const { return mLength; }
 
     void free() override;
@@ -28,5 +31,6 @@ private:
     bool mPrepared = false;
     void *mCpuAddress = nullptr;
     uint64_t mDeviceAddress = 0;
+    uint64_t mPhysicalAddress = 0;
     size_t mLength = 0;
 };

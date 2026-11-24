@@ -68,6 +68,10 @@ bool VVDmaBuffer::initWithLength(size_t bytes)
         return false;
     }
     mDeviceAddress = segment.fIOVMAddr;
+
+    IOByteCount physicalLength = 0;
+    const addr64_t physical = mMemory->getPhysicalSegment(0, &physicalLength, kIOMemoryMapperNone);
+    mPhysicalAddress = physicalLength >= mLength ? physical : 0;
     return true;
 }
 

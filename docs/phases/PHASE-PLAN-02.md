@@ -155,6 +155,29 @@ personality 초안:
 
 확인하지 못한 것: 시간 초과 경로(장치가 항상 응답). WI-1.006에서 같은 복구 경로를 외부 reset 흉내로 확인했다.
 
-(이후: T-01 결과, probe score, 픽셀 형식)
+### WI-2.002 display info 조회 (2026-11-24)
+
+- `vv/DisplayMode.hpp`의 `preferredModeFrom`: scanout이 꺼져 있거나, 크기가 0이거나, 2560×1600(Q-02)을 넘으면 1280×800으로 대체. 장치 config의 `num_scanouts`는 응답 배열 크기(16)로 자른다 (WI-1.007의 `usableScanouts`).
+- 실기 (kext 0.0.18): `VVPreferredMode = 1280x800` (장치 값 사용). 단위 테스트로 0·꺼짐·초과 대체를 확인.
+
+### WI-2.003 프레임버퍼 메모리 (2026-11-24) — T-01 해결
+
+- `vv/DisplayMode.hpp`: 32bpp, 한 줄 = width×4, 버퍼 크기는 page 단위 올림, 풀 상한 128 MiB(Q-03). 최대 모드 버퍼 2개(약 31 MiB)도 풀 안에 들어간다.
+- `vv/MemEntries.hpp`: DMA 세그먼트를 `virtio_gpu_mem_entry` 목록으로. 이어지는 세그먼트는 합치고, 길이 0·32비트 초과·칸 부족은 실패. 전송은 WI-2.004.
+- `VVDmaBuffer::physicalAddress()`: `getPhysicalSegment(kIOMemoryMapperNone)`로 CPU 물리 주소를 얻고, 버퍼 전체가 한 덩어리일 때만 값을 둔다.
+- 시작 때 선호 모드 크기의 프레임버퍼를 할당해 둔다 (`VVFramebuffer`).
+
+**T-01 판정 (실기, kext 0.0.18)**
+
+| 확인 | 결과 |
+| ---- | ---- |
+| 1280×800 프레임버퍼 | 4,096,000바이트, 물리 연속, 장치 주소 = 물리 주소 |
+| 2560×1600 연속 할당 시험 (`VVContigProbe`) | 16,384,000바이트 `ok-contiguous` |
+
+결정: 프레임버퍼는 **물리 연속으로 할당**하고, `getApertureRange()`는 그 물리 주소 범위로 `IODeviceMemory`를 만든다. 장치 주소와 물리 주소가 같으므로(IOMMU 없음) `ATTACH_BACKING`에는 항목 1개(장치 주소, 전체 길이)를 보낸다. REQ-030은 "연속일 필요는 없다"는 허용 조건이라 연속 할당과 충돌하지 않으며, 요구사항은 바꾸지 않는다.
+
+남은 위험: 부팅 직후가 아닌 실행 중 모드 전환(WI-3.002)에서는 메모리 단편화로 16 MiB 연속 할당이 실패할 수 있다. 그때는 시작 때 최대 모드 버퍼를 미리 잡아 두는 방식으로 바꾼다.
+
+(이후: probe score, 픽셀 형식)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

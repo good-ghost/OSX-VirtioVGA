@@ -127,7 +127,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | Status | ID        | Description                                         | Man-day |
 | ------ | --------- | --------------------------------------------------- | ------- |
 | [X]    | WI-2.001  | GPU 명령 계층 (직렬화·타임아웃·응답 검사)           | 1.5     |
-| [ ]    | WI-2.002  | display info 조회                                   | 0.5     |
+| [X]    | WI-2.002  | display info 조회                                   | 0.5     |
 | [ ]    | WI-2.003  | 프레임버퍼 메모리 풀과 backing                      | 1.5     |
 | [ ]    | WI-2.004  | 2D resource 생명주기와 픽셀 형식                    | 1.5     |
 | [ ]    | WI-2.005  | IOFramebuffer 하위 클래스 (고정 모드)               | 2.5     |
@@ -142,11 +142,11 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 응답 대기 타임아웃이 상수로 정의되어 있고, 타임아웃 시 오류를 돌려준다 (`kCommandTimeoutMs`=1000, kIOReturnTimeout 후 복구. 실제 장치는 항상 응답해 시간 초과는 실기로 일으키지 못함)
   - [X] `RESP_ERR_*`이면 명령 이름·인자를 로그로 남긴다 (실기: `RESOURCE_UNREF arg=0xfffffff0 -> ERR_INVALID_RESOURCE_ID`)
 - WI-2.002
-  - [ ] scanout별 활성 여부와 선호 크기를 읽고 `num_scanouts` 상한(16)을 검사한다
+  - [X] scanout별 활성 여부와 선호 크기를 읽고 `num_scanouts` 상한(16)을 검사한다 (선호 크기가 0·꺼짐·2560×1600 초과면 1280×800 대체, `VVPreferredMode`)
 - WI-2.003
-  - [ ] 128 MiB 상한의 메모리 풀에서 모드 크기만큼 할당한다
-  - [ ] `getApertureRange()`에 쓸 수 있는 메모리 형태(물리 연속 여부)를 실측으로 정하고 기록했다 (PHASE-PLAN-02 T-01)
-  - [ ] `ATTACH_BACKING` 항목 목록을 만들어 보낸다
+  - [X] 128 MiB 상한의 메모리 풀에서 모드 크기만큼 할당한다 (`VVFramebuffer` 1280×800 4,096,000바이트)
+  - [X] `getApertureRange()`에 쓸 수 있는 메모리 형태(물리 연속 여부)를 실측으로 정하고 기록했다 (PHASE-PLAN-02 T-01) — 물리 연속 할당, 16 MiB도 부팅 직후 성공, IOMMU 변환 없음
+  - [ ] `ATTACH_BACKING` 항목 목록을 만들어 보낸다 — 목록 생성(`vv/MemEntries.hpp`)과 테스트까지 완료. 전송은 resource가 생기는 WI-2.004에서
 - WI-2.004
   - [ ] create → attach → set_scanout → transfer → flush → detach → unref가 오류 없이 돈다
   - [ ] 색상 패턴(빨강·초록·파랑·흰색)이 바르게 보인다 (AC-04, 스크린샷)
@@ -362,7 +362,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 
 | ID   | 내용                                                                                                                                       | 확인 WI  |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| T-01 | `IOFramebuffer::getApertureRange()`는 `IODeviceMemory`(물리 주소 범위)를 돌려준다. 프레임버퍼가 물리적으로 연속이어야 할 가능성이 있어 REQ-030("물리 연속일 필요 없음")과 충돌할 수 있다 | WI-2.003 |
+| T-01 | **해결(2026-11-24, WI-2.003)**: 프레임버퍼를 물리 연속으로 할당한다. 2560×1600(16 MiB)도 부팅 직후 연속 할당 성공, 장치 주소 = CPU 물리 주소(IOMMU 없음). REQ-030(연속 아니어도 됨)과 충돌하지 않으므로 요구사항은 바꾸지 않는다. 남은 위험: 실행 중 모드 전환 때 단편화로 큰 연속 할당이 실패할 수 있음 → WI-3.002에서 확인. 원래 내용: | `IOFramebuffer::getApertureRange()`는 `IODeviceMemory`(물리 주소 범위)를 돌려준다. 프레임버퍼가 물리적으로 연속이어야 할 가능성이 있어 REQ-030("물리 연속일 필요 없음")과 충돌할 수 있다 | WI-2.003 |
 | T-02 | NFR-003(언로드 후 재로드)은 OC 주입만 쓰기로 한 Q-01 결정과 함께 성립하는지 확인되지 않았다                                                   | WI-5.003 |
 | T-03 | REQ-043은 REQUIREMENT §11에서 P3과 P6 양쪽에 적혀 있다. 우선순위 C에 맞춰 P6(WI-6.001)에 배치했다                                            | —        |
 | T-04 | OC 주입 kext는 부트 kernel collection에 들어가고 IOGraphicsFamily는 시스템 collection에 있어, 이 드라이버는 시스템 collection 로드 후에 로드된다 (WI-0.002 실측). 부트 프레임버퍼 대체·부트 화면 이어받기에 영향이 있는지 확인 필요 | WI-2.006, WI-2.009 |

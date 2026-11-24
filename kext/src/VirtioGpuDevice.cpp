@@ -138,6 +138,8 @@ bool VirtioGpuDevice::start(IOService *provider)
     startTimers();
     queryDisplayInfo();
     runSelfTest();
+    probeContiguousAllocation();
+    allocateFramebuffer(mPreferredMode);
     publishCounters();
     vv::publishLog(this);
     return true;
@@ -559,6 +561,55 @@ void VirtioGpuDevice::pollTimerFired(OSObject *owner, IOTimerEventSource *sender
     sender->setTimeoutMS(kPollIntervalMs);
 }
 
+bool VirtioGpuDevice::allocateFramebuffer(const vv::display::Mode &mode)
+{
+    // WI-2.003: 현재 모드 크기의 물리 연속 버퍼. resource에 붙이는 것(ATTACH_BACKING)은 WI-2.004.
+    if (!vv::display::isUsable(mode) || !vv::display::fitsInPool(mode)) {
+        VV_LOG_ERR("gpu: framebuffer mode %ux%u not allowed", mode.width, mode.height);
+        return false;
+    }
+    const uint64_t bytes = vv::display::framebufferBytes(mode);
+    VVDmaBuffer *buffer = VVDmaBuffer::withLength(static_cast<size_t>(bytes));
+    char summary[kSummaryBytes];
+    if (buffer == nullptr) {
+        snprintf(summary, sizeof(summary), "%ux%u alloc-failed", mode.width, mode.height);
+        setProperty("VVFramebuffer", summary);
+        VV_LOG_ERR("gpu: framebuffer %ux%u (%llu bytes) allocation failed", mode.width, mode.height, bytes);
+        return false;
+    }
+    if (mFramebuffer != nullptr) {
+        mFramebuffer->release();
+    }
+    mFramebuffer = buffer;
+    mFramebufferMode = mode;
+    // 장치 주소와 CPU 물리 주소가 같으면 IOMMU 변환이 없다는 뜻이다 (aperture에 물리 주소를 써도 된다).
+    const bool identity = buffer->physicalAddress() != 0 && buffer->physicalAddress() == buffer->deviceAddress();
+    snprintf(summary, sizeof(summary), "%ux%u bytes=%zu contiguous=%d dma-identity=%d", mode.width, mode.height,
+             buffer->length(), buffer->physicalAddress() != 0, identity);
+    setProperty("VVFramebuffer", summary);
+    VV_LOG_INFO("gpu: framebuffer %s", summary);
+    vv::publishLog(this);
+    return true;
+}
+
+void VirtioGpuDevice::probeContiguousAllocation()
+{
+#if VV_DEBUG
+    // T-01 확인: 최대 모드(2560×1600, 약 16 MiB)의 물리 연속 할당이 부팅 직후 성공하는지. 확인만 하고 바로 놓는다.
+    const uint64_t bytes = vv::display::framebufferBytes(vv::display::kMaxMode);
+    VVDmaBuffer *probe = VVDmaBuffer::withLength(static_cast<size_t>(bytes));
+    char summary[kSummaryBytes];
+    snprintf(summary, sizeof(summary), "%ux%u bytes=%llu %s", vv::display::kMaxMode.width,
+             vv::display::kMaxMode.height, bytes,
+             probe == nullptr ? "FAILED" : (probe->physicalAddress() != 0 ? "ok-contiguous" : "ok-not-contiguous"));
+    setProperty("VVContigProbe", summary);
+    VV_LOG_INFO("gpu: contiguous probe %s", summary);
+    if (probe != nullptr) {
+        probe->release();
+    }
+#endif
+}
+
 void VirtioGpuDevice::failDevice(const char *reason)
 {
     VV_LOG_ERR("gpu: init failed: %s", reason);
@@ -593,7 +644,11 @@ void VirtioGpuDevice::releaseDevice()
         mGate->release();
         mGate = nullptr;
     }
-    // 장치를 reset한 뒤라 명령 버퍼를 더는 쓰지 않는다.
+    // 장치를 reset한 뒤라 프레임버퍼·명령 버퍼를 더는 쓰지 않는다.
+    if (mFramebuffer != nullptr) {
+        mFramebuffer->release();
+        mFramebuffer = nullptr;
+    }
     if (mCommandBuffer != nullptr) {
         mCommandBuffer->release();
         mCommandBuffer = nullptr;

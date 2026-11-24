@@ -10,4 +10,8 @@ inline constexpr const char *kDisableBootArg = "-vvideooff";
 // boot-arg가 있는지 확인한다. 값이 없는 플래그 형태(-xxx)를 확인한다.
 bool isDriverDisabledByBootArg();
 
+// GPU PCI 장치에 이 속성이 있으면 IONDRVFramebuffer::probe가 매칭을 거절한다 (KDK IONDRVSupport 디스어셈블로 확인).
+// OpenCore DeviceProperties로 넣어 부팅 때부터 IONDRV가 붙지 않게 하고, 우리 프레임버퍼가 붙는다.
+inline constexpr const char *kIgnoreNdrvProperty = "AAPL,iokit-ignore-ndrv";
+
 } // namespace vv

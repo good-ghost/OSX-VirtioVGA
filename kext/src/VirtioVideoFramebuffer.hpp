@@ -45,11 +45,18 @@ public:
     IOReturn getStartupDisplayMode(IODisplayModeID *displayMode, IOIndex *depth) override;
     IOReturn setGammaTable(UInt32 channelCount, UInt32 dataCount, UInt32 dataWidth, void *data) override;
     IOReturn getAttribute(IOSelect attribute, uintptr_t *value) override;
+    IOReturn setAttribute(IOSelect attribute, uintptr_t value) override;
     IOReturn getAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t *value) override;
 
 private:
     static VirtioGpuDevice *findGpuDevice(IOService *pci);
     IODeviceMemory *makeApertureRange() const;
+    // IOGraphics가 어떤 순서로 무엇을 부르는지 VVFbTrace 속성에 남긴다 (2차 시도에서 enableController가 불리지
+    // 않은 원인 확인용, PHASE-PLAN-02). 처음 kMaxTraceEntries개만 남긴다.
+    void trace(const char *what, uint32_t selector = 0, uint64_t value = 0);
+
+    uintptr_t mPowerState = 0;  // IOGraphics가 setAttribute(kIOPowerAttribute)로 준 마지막 값
+    uint32_t mTraceEntries = 0;
 
     VirtioGpuDevice *mGpu = nullptr;       // retain
     VVDmaBuffer *mBuffer = nullptr;        // retain: GPU 서비스가 먼저 멈춰도 aperture가 해제된 메모리를 가리키지 않게

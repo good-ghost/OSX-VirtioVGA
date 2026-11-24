@@ -96,6 +96,6 @@ OC 주입 때와 달리 "config에서 Enabled=false"로 끄는 방법은 없다.
 | 방법 | 판단 |
 | ---- | ---- |
 | A'. virtio 부분은 OC 주입, 프레임버퍼만 AuxKC | AuxKC를 만들 때 디스크의 collection을 기준으로 링크하는데, OC로 주입한 kext는 디스크의 부트 collection에 없다. 우리 kext끼리 의존하면 링크할 수 없을 가능성이 높다 (확인 못 함). 한 kext 전체를 AuxKC로 옮기는 쪽이 단순하다 |
-| B. IOGraphicsFamily를 부트 collection에 함께 주입 | 실행 파일이 디스크·KDK 어디에도 없다. 불가 |
+| B. IOGraphicsFamily를 부트 collection에 함께 주입 | 실행 파일이 디스크·KDK 어디에도 없다. 불가 (2026-11-24 정정: KDK에는 `IOGraphicsFamily.kext/IOGraphicsFamily`(번들 최상위)와 `IONDRVSupport.kext/Contents/MacOS/IONDRVSupport` 실행 파일이 있다. 처음 조사 때 `Contents/MacOS`만 보고 잘못 적었다) |
 | C. Lilu 방식 런타임 해석 | vtable 직접 구성 필요. 비권장 |
 | Apple 서명(Developer ID + kext 권한) | 서명 인증서가 있으면 SIP를 유지할 수 있다. 개인 사용(Q-06)에서는 인증서 발급 부담이 크다 |

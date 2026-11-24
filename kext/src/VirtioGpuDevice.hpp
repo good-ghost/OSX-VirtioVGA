@@ -136,6 +136,10 @@ private:
     static void deferredTakeover(thread_call_param_t owner, thread_call_param_t);
     void runTakeover();
     void takeoverStage(const char *stage);
+    // PCI 장치에 AAPL,iokit-ignore-ndrv가 있으면(부팅 때부터 IONDRV 없음) 시작을 마친 뒤 매칭을 한 번 더 돌린다.
+    // 같은 매칭 회차에서 프레임버퍼 probe가 이 서비스의 start보다 먼저 돌아 거절됐을 수 있기 때문이다.
+    void requestFramebufferMatch();
+    static void deferredFramebufferMatch(thread_call_param_t owner, thread_call_param_t);
 
     void handleQueueEvent(unsigned queue);
     void handleConfigEvent();
@@ -195,6 +199,7 @@ private:
 
     IOTimerEventSource *mTakeoverTimer = nullptr;
     thread_call_t mTakeoverCall = nullptr;
+    thread_call_t mFramebufferMatchCall = nullptr;
     IOService *mFramebufferClient = nullptr;  // retain하지 않는다 (프레임버퍼가 stop에서 떼어 낸다)
     bool mStopping = false;
     uint32_t mRecoveries = 0;

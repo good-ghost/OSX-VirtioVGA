@@ -228,7 +228,7 @@ personality 초안:
 | 부트 collection (`BootKernelExtensions.kc`) | IOPCIFamily 2.9, AppleVirtIO 230.100.3 있음. **IOGraphicsFamily 없음** |
 | 시스템 collection (`SystemKernelExtensions.kc`) | **IOGraphicsFamily 599, IONDRVSupport 599** |
 | 보조 collection (`/Library/KernelCollections/AuxiliaryKernelExtensions.kc`) | AppleMobileDevice, HighPointRR, HighPointIOP (서명된 서드파티 kext) |
-| 디스크의 IOGraphicsFamily.kext | `Info.plist`, `iogdiagnose`만 있고 실행 파일 없음. KDK에도 실행 파일 없음(dSYM만) |
+| 디스크의 IOGraphicsFamily.kext | `Info.plist`, `iogdiagnose`만 있고 실행 파일 없음. KDK에도 실행 파일 없음(dSYM만) (2026-11-24 정정: KDK에는 `IOGraphicsFamily.kext/IOGraphicsFamily`(번들 최상위)와 `IONDRVSupport.kext/Contents/MacOS/IONDRVSupport` 실행 파일이 있다. 처음 조사 때 `Contents/MacOS`만 보고 잘못 적었다) |
 
 판단
 
@@ -241,7 +241,7 @@ personality 초안:
 | ---- | ---- | ---- |
 | A. 보조 collection 설치 | 프레임버퍼 kext를 `/Library/Extensions`에 두어 보조 collection으로 로드. 보조 collection은 시스템 collection 심볼로 링크할 수 있다. 서드파티 디스플레이 kext의 정상 경로 | 서명되지 않은 kext라 SIP의 kext 서명 검사 해제(`csr-active-config`)와 시스템 설정 승인이 필요 → **Q-01(SIP 유지, OC 주입만) 변경** |
 | A'. 둘로 나누기 | virtio 전송·GPU 장치는 지금처럼 OC 주입, 프레임버퍼만 보조 collection kext로 분리 | A와 같은 SIP 조건. 구조가 복잡해짐 |
-| B. IOGraphicsFamily를 부트 collection에 함께 주입 | | 디스크·KDK 어디에도 실행 파일이 없다. 있어도 시스템 collection과 중복 로드로 부팅 불가 위험 |
+| B. IOGraphicsFamily를 부트 collection에 함께 주입 | | 디스크·KDK 어디에도 실행 파일이 없다. 있어도 시스템 collection과 중복 로드로 부팅 불가 위험 (2026-11-24 정정: KDK에는 `IOGraphicsFamily.kext/IOGraphicsFamily`(번들 최상위)와 `IONDRVSupport.kext/Contents/MacOS/IONDRVSupport` 실행 파일이 있다. 처음 조사 때 `Contents/MacOS`만 보고 잘못 적었다) |
 | C. Lilu 방식 런타임 해석 | 링크 없이 실행 중에 IOGraphicsFamily 심볼을 찾아 쓰는 방식 | IOFramebuffer를 상속하려면 vtable을 직접 만들어야 해 매우 불안정. 비권장 |
 
 ### T-04 실기 확정 (2026-11-24, kext 0.0.21)

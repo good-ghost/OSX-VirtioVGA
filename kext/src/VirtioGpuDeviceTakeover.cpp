@@ -1,5 +1,10 @@
 // 부트 프레임버퍼 넘겨받기 (WI-2.006 범위를 WI-2.005 시험에 함께 넣음, R-06).
-// boot-arg `vvideo_takeover=1`일 때만 동작한다. 없으면 우리 프레임버퍼는 probe에서 빠지고 화면은 IONDRV가 그린다.
+// boot-arg `vvideo_takeover=1`일 때만 동작한다.
+//
+// **주의 (2026-11-24 실측)**: 실행 중 IONDRV를 terminate하면 IOGraphics 종료 알림을 처리하던
+// AppleUpstreamUserClient가 NULL을 참조해 패닉할 수 있다 (PHASE-PLAN-02). 기본 경로는 OpenCore
+// DeviceProperties로 부팅 때부터 AAPL,iokit-ignore-ndrv를 넣는 것이고(VirtioGpuDevice::requestFramebufferMatch),
+// 이 파일의 넘겨받기는 시험용으로만 남긴다.
 //
 // 우리 kext는 보조 kernel collection으로 부팅 후반에 로드된다. 그때 IONDRVFramebuffer가 이미 같은 PCI 장치에
 // IOFramebuffer 카테고리로 붙어 있어 점수만으로는 대체되지 않는다. 그래서:
@@ -17,12 +22,13 @@
 #include <IOKit/pci/IOPCIDevice.h>
 #include <libkern/OSAtomic.h>
 
+#include "VVBootArgs.hpp"
 #include "VVLog.hpp"
 
 namespace {
 using namespace vv::gpudevice;
 
-constexpr const char *kIgnoreNdrvProperty = "AAPL,iokit-ignore-ndrv";
+using vv::kIgnoreNdrvProperty;
 constexpr const char *kNdrvClassName = "IONDRVFramebuffer";
 constexpr uint32_t kDetachWaitMs = 10000;
 constexpr uint32_t kAttachWaitMs = 10000;
@@ -129,4 +135,29 @@ void VirtioGpuDevice::runTakeover()
     mPci->removeProperty(kIgnoreNdrvProperty);
     mPci->registerService();
     takeoverStage("ndrv-restore-requested");
+}
+
+void VirtioGpuDevice::requestFramebufferMatch()
+{
+    if (mPci == nullptr || mFramebufferMatchCall == nullptr || mPci->getProperty(kIgnoreNdrvProperty) == nullptr) {
+        return;
+    }
+    setProperty("VVFramebufferMatch", "scheduled");
+    thread_call_enter(mFramebufferMatchCall);
+}
+
+void VirtioGpuDevice::deferredFramebufferMatch(thread_call_param_t owner, thread_call_param_t)
+{
+    // start() 안(매칭 진행 중)에서 같은 PCI 장치의 registerService를 부르지 않도록 thread_call로 미룬다.
+    auto *self = static_cast<VirtioGpuDevice *>(owner);
+    OSIncrementAtomic(&self->mDisplayQueryActive);
+    if (!self->mStopping && self->mFramebufferClient == nullptr && self->isReadyForFramebuffer()) {
+        self->mPci->registerService();
+        self->setProperty("VVFramebufferMatch", "rematch-requested");
+        VV_LOG_INFO("gpu: framebuffer rematch requested (ignore-ndrv present)");
+    } else {
+        self->setProperty("VVFramebufferMatch", self->mFramebufferClient != nullptr ? "already-attached" : "not-ready");
+    }
+    vv::publishLog(self);
+    OSDecrementAtomic(&self->mDisplayQueryActive);
 }

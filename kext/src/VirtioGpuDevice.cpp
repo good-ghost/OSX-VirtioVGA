@@ -135,8 +135,9 @@ bool VirtioGpuDevice::start(IOService *provider)
     mPatternCall = thread_call_allocate(&VirtioGpuDevice::deferredPatternTest, this);
     mFlushCall = thread_call_allocate(&VirtioGpuDevice::deferredFlushLoop, this);
     mTakeoverCall = thread_call_allocate(&VirtioGpuDevice::deferredTakeover, this);
+    mFramebufferMatchCall = thread_call_allocate(&VirtioGpuDevice::deferredFramebufferMatch, this);
     if (mDisplayQueryCall == nullptr || mPatternCall == nullptr || mFlushCall == nullptr ||
-        mTakeoverCall == nullptr) {
+        mTakeoverCall == nullptr || mFramebufferMatchCall == nullptr) {
         failDevice("thread-call");
         return true;
     }
@@ -157,6 +158,7 @@ bool VirtioGpuDevice::start(IOService *provider)
     allocateFramebuffer(mPreferredMode);
     publishCounters();
     vv::publishLog(this);
+    requestFramebufferMatch();
     return true;
 }
 
@@ -814,7 +816,7 @@ void VirtioGpuDevice::stop(IOService *provider)
     mScanoutRequested = false;  // 전송 루프를 멈춘다
     // 대기 중인 thread_call은 취소하고, 이미 실행 중이면 끝날 때까지 기다린다 (mStopping을 보고 빨리 끝난다).
     // (thread_call_cancel_wait는 com.apple.kpi.private라 서드파티 kext가 쓸 수 없다.)
-    thread_call_t *calls[] = {&mDisplayQueryCall, &mPatternCall, &mFlushCall, &mTakeoverCall};
+    thread_call_t *calls[] = {&mDisplayQueryCall, &mPatternCall, &mFlushCall, &mTakeoverCall, &mFramebufferMatchCall};
     for (thread_call_t *call : calls) {
         if (*call != nullptr) {
             thread_call_cancel(*call);

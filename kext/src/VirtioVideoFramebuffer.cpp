@@ -26,6 +26,20 @@ constexpr UInt32 kComponentCount = 3;
 constexpr UInt32 kRedMask = 0x00FF0000;
 constexpr UInt32 kGreenMask = 0x0000FF00;
 constexpr UInt32 kBlueMask = 0x000000FF;
+// VVFbTrace 길이 제한.
+constexpr uint32_t kMaxTraceEntries = 48;
+constexpr size_t kTraceBytes = 2048;
+constexpr size_t kTraceEntryBytes = 48;
+
+// IOSelect(4문자 코드)를 읽을 수 있는 문자열로. 출력 문자가 아니면 '.'.
+void selectorName(uint32_t selector, char out[5])
+{
+    for (int i = 0; i < 4; ++i) {
+        const char c = static_cast<char>((selector >> (24 - 8 * i)) & 0xFF);
+        out[i] = (c >= 0x20 && c < 0x7F) ? c : '.';
+    }
+    out[4] = '\0';
+}
 
 bool takeoverEnabled()
 {
@@ -55,8 +69,11 @@ VirtioGpuDevice *VirtioVideoFramebuffer::findGpuDevice(IOService *pci)
 
 IOService *VirtioVideoFramebuffer::probe(IOService *provider, SInt32 *score)
 {
-    // 거절하면 객체가 바로 해제되므로 로그를 남길 곳이 없다. 결과는 GPU 서비스의 VVTakeover로 본다.
-    if (vv::isDriverDisabledByBootArg() || !takeoverEnabled()) {
+    // 거절하면 객체가 바로 해제되므로 로그를 남길 곳이 없다.
+    // 매칭 조건: PCI 장치에 AAPL,iokit-ignore-ndrv가 있거나(OpenCore DeviceProperties, IONDRV가 붙지 않음)
+    // 실행 중 넘겨받기 boot-arg가 있을 때. 둘 다 없으면 IONDRV가 화면을 맡도록 빠진다.
+    if (vv::isDriverDisabledByBootArg() ||
+        (provider->getProperty(vv::kIgnoreNdrvProperty) == nullptr && !takeoverEnabled())) {
         return nullptr;
     }
     VirtioGpuDevice *gpu = findGpuDevice(provider);
@@ -68,6 +85,27 @@ IOService *VirtioVideoFramebuffer::probe(IOService *provider, SInt32 *score)
         return nullptr;
     }
     return IOFramebuffer::probe(provider, score);
+}
+
+void VirtioVideoFramebuffer::trace(const char *what, uint32_t selector, uint64_t value)
+{
+    if (mTraceEntries >= kMaxTraceEntries) {
+        return;
+    }
+    ++mTraceEntries;
+    char entry[kTraceEntryBytes];
+    if (selector != 0) {
+        char name[5];
+        selectorName(selector, name);
+        snprintf(entry, sizeof(entry), "%s(%s)=%llu", what, name, value);
+    } else {
+        snprintf(entry, sizeof(entry), "%s", what);
+    }
+    OSString *previous = OSDynamicCast(OSString, getProperty("VVFbTrace"));
+    char joined[kTraceBytes];
+    snprintf(joined, sizeof(joined), "%s%s%s", previous != nullptr ? previous->getCStringNoCopy() : "",
+             previous != nullptr ? " " : "", entry);
+    setProperty("VVFbTrace", joined);
 }
 
 bool VirtioVideoFramebuffer::start(IOService *provider)
@@ -82,9 +120,11 @@ bool VirtioVideoFramebuffer::start(IOService *provider)
         mGpu = nullptr;
         return false;
     }
+    trace("start");
     if (!IOFramebuffer::start(provider)) {
         return false;  // free()가 정리한다
     }
+    trace("start-done");
     mGpu->framebufferAttached(this, true);
     VV_LOG_INFO("fb: started %ux%u", mMode.width, mMode.height);
     vv::publishLog(mGpu);
@@ -123,6 +163,7 @@ IOReturn VirtioVideoFramebuffer::enableController()
     }
     const IOReturn result = mGpu->startScanout();
     mScanoutStarted = result == kIOReturnSuccess;
+    trace("enableController", 0, static_cast<uint32_t>(result));
     VV_LOG_INFO("fb: enableController -> 0x%x", result);
     vv::publishLog(mGpu);
     return result;
@@ -235,6 +276,7 @@ IOReturn VirtioVideoFramebuffer::getCurrentDisplayMode(IODisplayModeID *displayM
 
 IOReturn VirtioVideoFramebuffer::setDisplayMode(IODisplayModeID displayMode, IOIndex depth)
 {
+    trace("setDisplayMode", 0, static_cast<uint64_t>(displayMode));
     // 모드 전환은 WI-3.002. 지금은 하나뿐인 모드만 받는다.
     return displayMode == kOnlyModeId && depth == kOnlyDepth ? kIOReturnSuccess : kIOReturnUnsupported;
 }
@@ -252,6 +294,13 @@ IOReturn VirtioVideoFramebuffer::setGammaTable(UInt32, UInt32, UInt32, void *)
 
 IOReturn VirtioVideoFramebuffer::getAttribute(IOSelect attribute, uintptr_t *value)
 {
+    trace("get", attribute);
+    if (attribute == kIOPowerAttribute) {
+        if (value != nullptr) {
+            *value = mPowerState;
+        }
+        return kIOReturnSuccess;
+    }
     if (attribute == kIOHardwareCursorAttribute) {
         // 하드웨어 커서는 WI-4.001. 지금은 미지원을 보고해 소프트웨어 커서를 쓰게 한다 (REQ-051).
         if (value != nullptr) {
@@ -262,9 +311,22 @@ IOReturn VirtioVideoFramebuffer::getAttribute(IOSelect attribute, uintptr_t *val
     return IOFramebuffer::getAttribute(attribute, value);
 }
 
+IOReturn VirtioVideoFramebuffer::setAttribute(IOSelect attribute, uintptr_t value)
+{
+    trace("set", attribute, value);
+    if (attribute == kIOPowerAttribute) {
+        // IOFramebuffer가 전원 상태를 바꿀 때 하위 클래스에 알린다. virtio-gpu에는 전원 명령이 없으므로 값만 기억한다.
+        // (디스플레이 잠자기 처리는 WI-4.002.)
+        mPowerState = value;
+        return kIOReturnSuccess;
+    }
+    return IOFramebuffer::setAttribute(attribute, value);
+}
+
 IOReturn VirtioVideoFramebuffer::getAttributeForConnection(IOIndex connectIndex, IOSelect attribute,
                                                            uintptr_t *value)
 {
+    trace("getConn", attribute);
     // 연결(모니터)은 하나이고 항상 켜져 있다. EDID(DDC)는 WI-3.003.
     if (connectIndex == 0 && (attribute == kConnectionEnable || attribute == kConnectionCheckEnable)) {
         if (value != nullptr) {

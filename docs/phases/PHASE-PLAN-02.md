@@ -244,6 +244,18 @@ personality 초안:
 | B. IOGraphicsFamily를 부트 collection에 함께 주입 | | 디스크·KDK 어디에도 실행 파일이 없다. 있어도 시스템 collection과 중복 로드로 부팅 불가 위험 |
 | C. Lilu 방식 런타임 해석 | 링크 없이 실행 중에 IOGraphicsFamily 심볼을 찾아 쓰는 방식 | IOFramebuffer를 상속하려면 vtable을 직접 만들어야 해 매우 불안정. 비권장 |
 
+### T-04 실기 확정 (2026-11-24, kext 0.0.21)
+
+| 항목 | 값 |
+| ---- | -- |
+| 변경 | WI-2.004 재설치 상태(0.0.19)에서 **personality 없는 IOFramebuffer 스텁 클래스만 추가**. config.plist·boot-args(`keepsyms=1`)·OC 로그(Target 0)는 그대로 |
+| kext | 0.0.21, UUID `95883E93-…`, IOFramebuffer 심볼 98개를 시스템 collection의 IOGraphicsFamily에서 가져옴 (`kmutil libraries -p`) |
+| 결과 | 부팅·화면 정상. **`kmutil showloaded`에 kext 없음**, `ioclasscount`에 VirtioVideoProbe·VirtioGpuDevice·VirtioVideoFramebuffer 모두 "no such class", 통합 로그에 kext 이름 없음, 새 패닉 없음 |
+
+결론: **IOGraphicsFamily 심볼을 쓰는 kext는 OpenCore 주입으로 로드되지 않는다 (T-04 확정).** 0.0.20이 로드되지 않은 원인도 이것이다. 실패할 때 kext 전체가 버려지므로 같은 kext 안의 virtio 전송·GPU 장치 서비스도 함께 사라진다.
+
+다음 결정 필요: 해결 후보 A/A'(보조 collection, Q-01 변경). EFI에는 지금 0.0.21이 들어 있어 드라이버가 전혀 로드되지 않는 상태다.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

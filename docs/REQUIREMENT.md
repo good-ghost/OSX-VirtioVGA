@@ -5,7 +5,7 @@
 | 항목      | 내용                                                         |
 | --------- | ------------------------------------------------------------ |
 | 문서      | `docs/REQUIREMENT.md`                                        |
-| 버전      | 1.0                                                          |
+| 버전      | 1.1                                                          |
 | 작성일    | 2026-11-23                                                   |
 | 상태      | 확정 — 모든 Open Question 답변 완료. 이후 변경은 변경 이력에 남긴다 |
 | 대상      | OSX-KVM 게스트 macOS용 virtio-gpu 2D 프레임버퍼 드라이버(kext) |
@@ -24,6 +24,7 @@
 | 0.8  | 2026-11-23 | ENHANCE | 사용자 정보: 디스플레이 백엔드 GTK, `-display gtk,gl=on`이면 `virtio-vga-gl` 사용 가능. §8.1.2 추가, 범위·REQ-007·REQ-027·HST-001·HST-004·Q-12 보완, Q-13 추가 |
 | 0.9  | 2026-11-23 | ENHANCE | 사용자 지시 "Use recommendations"로 Q-12(A+B), Q-13(A) 확정. §4.2, §8.1.2, R-03 반영 |
 | 1.0  | 2026-11-23 | ENHANCE | Q-04 답변(시스템 잠자기 사용 안 함, 일정 시간 후 로그인 화면으로 전환)으로 확정. REQ-053 우선순위 M, REQ-054 W, AC-09·R-09 추가, §8.1.3 추가 |
+| 1.1  | 2026-11-24 | ENHANCE | **Q-01 변경**(사용자 승인 "Yes, try it"): T-04 확정(IOGraphicsFamily 심볼을 쓰는 kext는 OC 주입으로 로드 불가)에 따라 `/Library/Extensions`(보조 kernel collection) 설치와 SIP 부분 해제(`csr-active-config` 0x201) 시험으로 전환. 근거 `docs/research/aux-kc-option-a.md`. REQ-070·071·073과 INSTALL.md는 시험 결과를 본 뒤 고친다 |
 
 ### 1.2 용어
 
@@ -304,6 +305,7 @@ BAR 해석은 ioreg `assigned-addresses` 인코딩을 읽은 것이다. 각 BAR�
 1. **kext만 가능하다.** DriverKit에는 `IOFramebuffer`에 해당하는 패밀리가 없다. 서드파티 디스플레이 드라이버는 `IOGraphicsFamily`의 `IOFramebuffer`를 상속하는 kext로 만든다. `IOGraphicsFamily`(599)는 현재 게스트에 로드되어 있다.
 2. **전송 계층은 직접 구현한다 (Q-07 확정).** `AppleVirtIOTransport`는 비공개 API라 헤더가 없고 macOS 업데이트에 따라 바뀔 수 있다. 공개 API인 `IOPCIDevice`만 쓴다.
 3. **로드 방식**: SIP가 켜져 있으므로 서명 없는 kext를 `kmutil load`로 올릴 수 없다. OpenCore 주입은 SIP를 켠 채로 쓸 수 있다. **개발과 설치 모두 OpenCore `Kernel > Add` 주입만 쓴다 (Q-01 확정).** 시험할 때마다 재부팅이 필요하다. SIP는 바꾸지 않는다.
+   - **2026-11-24 변경 (v1.1)**: T-04 확정으로 OC 주입만으로는 프레임버퍼 kext를 올릴 수 없다. `/Library/Extensions` 설치(보조 kernel collection)와 SIP 부분 해제(`CSR_ALLOW_UNTRUSTED_KEXTS` 0x1 + `CSR_ALLOW_UNAPPROVED_KEXTS` 0x200)를 시험한다 (Q-01, `docs/research/aux-kc-option-a.md`).
 4. **빌드 도구**: Xcode 26.3에 kext 프로젝트 템플릿이 남아 있는지 확인하지 못했다. Phase 0에서 확인하고, 없으면 `xcrun clang -mkernel` 기반 Makefile을 쓴다. 대상 SDK는 설치된 `MacOSX26.2.sdk`, 배포 대상(`MACOSX_DEPLOYMENT_TARGET`)은 15.0.
 5. **디버깅**: QEMU gdbstub(`-s`)와 빌드 24H241용 KDK로 소스 수준 디버깅을 한다. KDK는 Apple Developer 사이트에서 사용자가 받아 설치한다 (sudo 필요).
 6. **화면 갱신 방식**: virtio-vga는 virtio-gpu 드라이버가 `SET_SCANOUT`을 하면 VGA(BAR0) 출력을 멈춘다. 따라서 BAR0을 계속 쓰는 방식은 해상도 제약(§2.6)을 풀지 못하며, 게스트 RAM backing + 주기 flush 방식을 쓴다.
@@ -439,7 +441,7 @@ BAR 해석은 ioreg `assigned-addresses` 인코딩을 읽은 것이다. 각 BAR�
 
 | ID   | 상태 | 질문                                                                                     | 선택지                                                                                         | 권장안 |
 | ---- | ---- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------ |
-| Q-01 | 확정 | 개발 중 kext를 어떻게 올릴까?                                                            | A) OpenCore 주입만(SIP 유지, 매번 재부팅) B) SIP 부분 해제 + `kmutil load`(빠름, 보안 약화) C) A를 기본으로, 필요할 때만 B | A. 재부팅이 필요하지만 SIP를 유지하고 실패 시 OC에서 바로 끌 수 있다. Lilu/WhateverGreen이 OC로 주입되는지도 함께 확인 필요 |
+| Q-01 | 확정 | 개발 중 kext를 어떻게 올릴까?                                                            | A) OpenCore 주입만(SIP 유지, 매번 재부팅) B) SIP 부분 해제 + `kmutil load`(빠름, 보안 약화) C) A를 기본으로, 필요할 때만 B | A. 재부팅이 필요하지만 SIP를 유지하고 실패 시 OC에서 바로 끌 수 있다. Lilu/WhateverGreen이 OC로 주입되는지도 함께 확인 필요 | **변경 (2026-11-24, v1.1)**: OC 주입으로는 IOFramebuffer 하위 클래스를 올릴 수 없음이 확정되어(T-04), 보조 kernel collection 설치 + SIP 부분 해제(0x201)를 시험한다. 시험 결과에 따라 최종 확정 |
 | Q-02 | 확정 | 지원할 최대 해상도는?                                                                    | A) 1920×1200 B) 2560×1600 C) 3840×2160                                                         | B. 버퍼 하나에 약 16 MiB로 메모리 부담이 작고 HiDPI 1280×800을 지원할 수 있다 |
 | Q-03 | 확정 | 프레임버퍼 메모리 풀(= 보고할 VRAM) 기본 크기는?                                         | A) 현재 모드 크기만 B) 64 MiB C) 128 MiB D) 256 MiB                                             | C. 최대 모드 버퍼 2개 + 여유. 메모리 32 GiB 중 wired 128 MiB는 부담이 작다 |
 | Q-04 | 확정 | 호스트 실행 정보: OSX-KVM 실행 스크립트의 장치 옵션, QEMU 버전, 디스플레이 백엔드(GTK/SPICE/VNC), VM 잠자기 사용 여부 | 실행 스크립트 내용 공유 | 받음: QEMU 10.0.13, `-device` 목록(§8.1), `virtio-vga` 기본값(§8.1.1), 백엔드 GTK(§8.1.2), 잠자기 사용 안 함·일정 시간 후 로그인 화면(§8.1.3) |

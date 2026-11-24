@@ -154,5 +154,5 @@ VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.9, UUID `67FC1D50-9D79-33EA-8907-274EF2861EAC` (dSYM은 `build/dsym-archive/`). 진단 서비스 `VirtioVideoPciProbe`가 GPU 장치에 별도 카테고리로 붙어 읽기만 한다
+- EFI의 kext 버전: 0.0.10, UUID `FB5DA7D5-BCAB-3DD2-9D33-CCA8920E5447` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 reset하고 FEATURES_OK(0x0B)까지 초기화한다. 화면은 아직 IONDRV가 그린다
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

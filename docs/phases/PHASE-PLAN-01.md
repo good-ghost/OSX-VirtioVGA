@@ -149,3 +149,29 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
   - 장치 상태는 이전과 같다 (status=ACK, nq=2, scanouts=1). 부팅·화면 정상.
 - 단위 테스트 23개 통과.
 
+### WI-1.003 (2026-11-24)
+
+구현
+
+- `vv/VirtioFeatures.hpp`: 필수 `VERSION_1`, 선택 `ACCESS_PLATFORM`·GPU `EDID`, 금지 `VIRGL`·`RESOURCE_BLOB`·`CONTEXT_INIT`·`RESOURCE_UUID` (겹치지 않음을 static_assert). 링 feature(`INDIRECT_DESC`, `EVENT_IDX`, `RING_RESET`, `RING_PACKED`)는 아직 받지 않는다 (WI-4.005에서 측정 후).
+- `VirtioPciTransport`: `reset()`(0 쓰고 0이 읽힐 때까지 최대 1초), `addStatus()`, 64비트 feature 읽기·쓰기.
+- `VirtioGpuDevice`: 진단 서비스 `VirtioVideoPciProbe`를 대신하는 장치 서비스 (`IOMatchCategory=VirtioVideoGpu`). 초기화 실패 시 FAILED → reset. P1 동안은 실패해도 객체를 남겨 원인을 속성으로 보인다 (P2에서는 REQ-005대로 false).
+- 2초 주기 상태 감시: 기대값과 다르면 `VVStatusMismatches`를 올리고 로그를 남긴다 (T-05).
+- `stop()`에서 장치를 reset한다.
+
+실기 확인 (kext 0.0.10, UUID `FB5DA7D5-…`)
+
+| 항목 | 값 |
+| ---- | -- |
+| reset 전 상태 | `0x01` (ACK) — WI-1.001 관찰과 같다 |
+| 장치 feature | hi `0x00000001`, lo `0x30000002` → 비트 1 EDID, 28 INDIRECT_DESC, 29 EVENT_IDX, 32 VERSION_1 |
+| 협상 결과 | hi `0x00000001`, lo `0x00000002` → VERSION_1, EDID. 읽어 들인 값이 쓴 값과 같다 |
+| FEATURES_OK 후 상태 | `0x0B` (ACK, DRIVER, FEATURES_OK) |
+| 상태 감시 | 부팅 후 약 5분, 138회 확인, 불일치 0 — 이 시간 동안 외부에서 장치를 reset하지 않았다 (T-05). 디스플레이 잠자기·DRIVER_OK 이후는 WI-1.006·WI-4.002에서 다시 본다 |
+| 화면·부팅 | 정상 (IONDRV 1280×800), 새 패닉 없음 |
+
+관찰
+
+- QEMU `virtio-vga,help`에는 `queue_reset=on`이 있지만 장치는 `VIRTIO_F_RING_RESET`(비트 40)을 제공하지 않았다. `ACCESS_PLATFORM`(33)도 없다 (`iommu_platform=off`와 일치).
+- `VERSION_1` 없는 장치에서 실패하는 경로는 실제 장치로 만들 수 없어 단위 테스트로만 확인했다.
+

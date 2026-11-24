@@ -13,6 +13,10 @@ namespace {
 namespace p = vv::virtio::pci;
 
 constexpr size_t kMaxVirtioCaps = 16;
+// reset 완료 대기. QEMU는 즉시 0을 돌려주지만 사양은 시간을 정하지 않는다.
+constexpr uint32_t kResetTimeoutMs = 1000;
+constexpr uint32_t kResetPollIntervalMs = 1;
+constexpr uint32_t kFeatureWordBits = 32;
 constexpr uint8_t kBarRegisterStride = 4;
 
 uint8_t barRegister(uint8_t bar)
@@ -164,3 +168,81 @@ void VirtioPciTransport::free()
     }
     OSObject::free();
 }
+
+namespace {
+
+template <typename T>
+bool writeAt(volatile uint8_t *address, T value)
+{
+    if (address == nullptr) {
+        return false;
+    }
+    *reinterpret_cast<volatile T *>(address) = value;
+    return true;
+}
+
+using CommonCfg = vv::virtio::pci::PciCommonCfg;
+
+} // namespace
+
+bool VirtioPciTransport::commonWrite8(uint32_t offset, uint8_t value)
+{
+    return writeAt<uint8_t>(regionAddress(mLayout.common, offset, sizeof(uint8_t)), value);
+}
+
+bool VirtioPciTransport::commonWrite32(uint32_t offset, uint32_t value)
+{
+    return writeAt<uint32_t>(regionAddress(mLayout.common, offset, sizeof(uint32_t)), value);
+}
+
+uint8_t VirtioPciTransport::status() const
+{
+    return commonRead8(offsetof(CommonCfg, deviceStatus));
+}
+
+bool VirtioPciTransport::reset()
+{
+    if (!commonWrite8(offsetof(CommonCfg, deviceStatus), 0)) {
+        return false;
+    }
+    for (uint32_t waited = 0; waited < kResetTimeoutMs; waited += kResetPollIntervalMs) {
+        if (status() == 0) {
+            return true;
+        }
+        IOSleep(kResetPollIntervalMs);
+    }
+    VV_LOG_ERR("transport: reset timed out, status=0x%02x", status());
+    return false;
+}
+
+bool VirtioPciTransport::addStatus(uint8_t bits)
+{
+    return commonWrite8(offsetof(CommonCfg, deviceStatus), static_cast<uint8_t>(status() | bits));
+}
+
+uint64_t VirtioPciTransport::readDeviceFeatures()
+{
+    commonWrite32(offsetof(CommonCfg, deviceFeatureSelect), 0);
+    const uint64_t low = commonRead32(offsetof(CommonCfg, deviceFeature));
+    commonWrite32(offsetof(CommonCfg, deviceFeatureSelect), 1);
+    const uint64_t high = commonRead32(offsetof(CommonCfg, deviceFeature));
+    return (high << kFeatureWordBits) | low;
+}
+
+bool VirtioPciTransport::writeDriverFeatures(uint64_t features)
+{
+    return commonWrite32(offsetof(CommonCfg, driverFeatureSelect), 0) &&
+           commonWrite32(offsetof(CommonCfg, driverFeature), static_cast<uint32_t>(features)) &&
+           commonWrite32(offsetof(CommonCfg, driverFeatureSelect), 1) &&
+           commonWrite32(offsetof(CommonCfg, driverFeature), static_cast<uint32_t>(features >> kFeatureWordBits));
+}
+
+uint64_t VirtioPciTransport::readDriverFeatures()
+{
+    commonWrite32(offsetof(CommonCfg, driverFeatureSelect), 0);
+    const uint64_t low = commonRead32(offsetof(CommonCfg, driverFeature));
+    commonWrite32(offsetof(CommonCfg, driverFeatureSelect), 1);
+    const uint64_t high = commonRead32(offsetof(CommonCfg, driverFeature));
+    return (high << kFeatureWordBits) | low;
+}
+

@@ -88,7 +88,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | ------ | --------- | --------------------------------------------------- | ------- |
 | [X]    | WI-1.001  | AppleVirtIOPCITransport 공존 조사                   | 1.5     |
 | [X]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
-| [ ]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
+| [X]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
 | [ ]    | WI-1.004  | split virtqueue                                     | 2       |
 | [ ]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
 | [ ]    | WI-1.006  | 장치 reset 처리와 전송 클래스 분리                  | 1       |
@@ -103,10 +103,10 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 범위가 BAR 크기를 넘는 capability를 거절하는 단위 테스트가 통과한다 (`VirtioPciLayoutTests`, `PciCapWalkTests`)
   - [X] 실제 장치에서 찾은 값을 PHASE-PLAN-01 실측표에 기록했다 (WI-1.001 실측과 0.0.9 전송 계층 결과 일치)
 - WI-1.003
-  - [ ] reset → ACKNOWLEDGE → DRIVER → feature → FEATURES_OK 재확인 → DRIVER_OK 순서로 진행한다
-  - [ ] `VIRTIO_F_VERSION_1`이 없으면 실패한다
-  - [ ] 3D/blob feature(`VIRGL`, `RESOURCE_BLOB`, `CONTEXT_INIT`)를 협상하지 않는다
-  - [ ] 장치가 제공한 feature와 협상한 feature를 로그와 IORegistry에 남긴다
+  - [X] reset → ACKNOWLEDGE → DRIVER → feature → FEATURES_OK 재확인 → DRIVER_OK 순서로 진행한다 — FEATURES_OK(status 0x0B)까지 실기 확인. DRIVER_OK는 §3.1.1대로 큐 설정 뒤(WI-1.004)에 쓴다
+  - [X] `VIRTIO_F_VERSION_1`이 없으면 실패한다 — 단위 테스트로 확인 (실제 장치는 VERSION_1을 제공하므로 실기로는 시험 불가)
+  - [X] 3D/blob feature(`VIRGL`, `RESOURCE_BLOB`, `CONTEXT_INIT`)를 협상하지 않는다 — 금지 목록과 static_assert, 단위 테스트
+  - [X] 장치가 제공한 feature와 협상한 feature를 로그와 IORegistry에 남긴다 (`VVDeviceFeatures`, `VVDriverFeatures`)
 - WI-1.004
   - [ ] 디스크립터 테이블·avail·used 링을 DMA 가능한 메모리로 할당하고 주소를 장치에 설정한다
   - [ ] 인덱스 wrap-around를 포함한 링 로직 단위 테스트가 통과한다

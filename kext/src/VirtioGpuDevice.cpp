@@ -43,6 +43,9 @@ constexpr uint32_t kTestResetDelayMs = 30000;
 // 시험 패턴 boot-arg와 시작 지연. 로그인하고 QEMU 창을 볼 시간을 준다.
 constexpr const char *kTestPatternBootArg = "vvideo_test_pattern";
 constexpr uint32_t kPatternStartDelayMs = 90000;
+// 부트 프레임버퍼 넘겨받기 boot-arg와 시작 지연 (VirtioGpuDeviceTakeover.cpp 머리말).
+constexpr const char *kTakeoverBootArg = "vvideo_takeover";
+constexpr uint32_t kTakeoverDelayMs = 60000;
 // stop에서 실행 중인 확인 명령이 끝나기를 기다리는 한도. 명령 기한(kCommandTimeoutMs)보다 넉넉히 잡는다.
 constexpr uint32_t kDisplayQueryDrainMs = 3000;
 constexpr uint32_t kDrainPollMs = 1;
@@ -130,7 +133,10 @@ bool VirtioGpuDevice::start(IOService *provider)
     }
     mDisplayQueryCall = thread_call_allocate(&VirtioGpuDevice::deferredDisplayQuery, this);
     mPatternCall = thread_call_allocate(&VirtioGpuDevice::deferredPatternTest, this);
-    if (mDisplayQueryCall == nullptr || mPatternCall == nullptr) {
+    mFlushCall = thread_call_allocate(&VirtioGpuDevice::deferredFlushLoop, this);
+    mTakeoverCall = thread_call_allocate(&VirtioGpuDevice::deferredTakeover, this);
+    if (mDisplayQueryCall == nullptr || mPatternCall == nullptr || mFlushCall == nullptr ||
+        mTakeoverCall == nullptr) {
         failDevice("thread-call");
         return true;
     }
@@ -699,6 +705,14 @@ void VirtioGpuDevice::startTimers()
             VV_LOG_INFO("gpu: pattern test scheduled in %u ms", kPatternStartDelayMs);
         }
     }
+    if (bootArgEnabled(kTakeoverBootArg)) {
+        mTakeoverTimer = IOTimerEventSource::timerEventSource(this, &VirtioGpuDevice::takeoverTimerFired);
+        if (mTakeoverTimer != nullptr && mWorkLoop->addEventSource(mTakeoverTimer) == kIOReturnSuccess) {
+            mTakeoverTimer->setTimeoutMS(kTakeoverDelayMs);
+            setProperty("VVTakeover", "scheduled");
+            VV_LOG_INFO("gpu: takeover scheduled in %u ms", kTakeoverDelayMs);
+        }
+    }
     if (mIrqMode != v::IrqMode::Poll) {
         return;
     }
@@ -712,7 +726,7 @@ void VirtioGpuDevice::startTimers()
 
 void VirtioGpuDevice::stopTimers()
 {
-    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer, &mTestResetTimer, &mPatternTimer};
+    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer, &mTestResetTimer, &mPatternTimer, &mTakeoverTimer};
     for (IOTimerEventSource **timer : timers) {
         if (*timer == nullptr) {
             continue;
@@ -797,9 +811,10 @@ void VirtioGpuDevice::publishCounters()
 void VirtioGpuDevice::stop(IOService *provider)
 {
     mStopping = true;
+    mScanoutRequested = false;  // 전송 루프를 멈춘다
     // 대기 중인 thread_call은 취소하고, 이미 실행 중이면 끝날 때까지 기다린다 (mStopping을 보고 빨리 끝난다).
     // (thread_call_cancel_wait는 com.apple.kpi.private라 서드파티 kext가 쓸 수 없다.)
-    thread_call_t *calls[] = {&mDisplayQueryCall, &mPatternCall};
+    thread_call_t *calls[] = {&mDisplayQueryCall, &mPatternCall, &mFlushCall, &mTakeoverCall};
     for (thread_call_t *call : calls) {
         if (*call != nullptr) {
             thread_call_cancel(*call);

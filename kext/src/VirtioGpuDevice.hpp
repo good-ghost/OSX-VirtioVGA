@@ -54,6 +54,18 @@ public:
     void stop(IOService *provider) override;
     IOWorkLoop *getWorkLoop() const override;
 
+    // 화면 출력 (WI-2.005, VirtioGpuDeviceScanout.cpp). 프레임버퍼 클래스(VirtioVideoFramebuffer)가 부른다.
+    // 장치가 초기화되어 프레임버퍼를 줄 수 있으면 true.
+    bool isReadyForFramebuffer() const;
+    // 현재 프레임버퍼를 retain해서 돌려준다 (호출자가 release). 모드는 modeOut에.
+    VVDmaBuffer *copyFramebuffer(vv::display::Mode *modeOut) const;
+    // scanout 0에 프레임버퍼를 연결하고 주기 전송을 시작한다. 워크루프 밖에서 부른다.
+    IOReturn startScanout();
+    // 주기 전송을 멈추고 scanout을 끈 뒤 resource를 정리한다. 워크루프 밖에서 부른다.
+    void stopScanout();
+    // 프레임버퍼 클래스가 붙거나(attached=true) 떨어질 때 알린다 (takeover 확인용).
+    void framebufferAttached(IOService *framebuffer, bool attached);
+
 private:
     static constexpr unsigned kQueueCount = 2;
 
@@ -112,6 +124,19 @@ private:
     bool allocateFramebuffer(const vv::display::Mode &mode);
     void probeContiguousAllocation();
 
+    // scanout과 주기 전송 (WI-2.005). 전송 루프는 thread_call 하나가 mScanoutRequested 동안 돈다.
+    static void deferredFlushLoop(thread_call_param_t owner, thread_call_param_t);
+    void runFlushLoop();
+    bool setUpScanoutResource();
+    void tearDownScanoutResource(bool disableScanout);
+    void publishScanout(const char *state);
+
+    // 부트 프레임버퍼 넘겨받기 (WI-2.006 범위, boot-arg `vvideo_takeover=1`, VirtioGpuDeviceTakeover.cpp).
+    static void takeoverTimerFired(OSObject *owner, IOTimerEventSource *sender);
+    static void deferredTakeover(thread_call_param_t owner, thread_call_param_t);
+    void runTakeover();
+    void takeoverStage(const char *stage);
+
     void handleQueueEvent(unsigned queue);
     void handleConfigEvent();
     void handleSharedEvent();
@@ -159,6 +184,18 @@ private:
     // 실행 중인 thread_call(확인 명령·시험 패턴) 수. stop에서 0이 될 때까지 기다린다
     volatile SInt32 mDisplayQueryActive = 0;
     uint32_t mNextResourceId = 1;  // 0은 "resource 없음"(scanout 끄기)이라 쓰지 않는다
+
+    thread_call_t mFlushCall = nullptr;
+    volatile bool mScanoutRequested = false;
+    volatile bool mFlushLoopRunning = false;
+    uint32_t mScanoutResourceId = 0;  // 0이면 아직 연결 안 됨 (또는 장치 reset으로 잃음)
+    uint32_t mFlushes = 0;
+    uint32_t mFlushErrors = 0;
+    uint32_t mScanoutSetups = 0;
+
+    IOTimerEventSource *mTakeoverTimer = nullptr;
+    thread_call_t mTakeoverCall = nullptr;
+    IOService *mFramebufferClient = nullptr;  // retain하지 않는다 (프레임버퍼가 stop에서 떼어 낸다)
     bool mStopping = false;
     uint32_t mRecoveries = 0;
     bool mGivenUp = false;

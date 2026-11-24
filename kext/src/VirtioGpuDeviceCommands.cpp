@@ -58,8 +58,22 @@ IOReturn VirtioGpuDevice::gatedSubmit(OSObject *owner, void *request, void *resp
         return kIOReturnNotReady;
     }
     if (self->mCommandInFlight) {
-        // 이전 명령이 시간 초과로 장치에 남아 있다. reset(WI-1.006) 전에는 새 명령을 보내지 않는다.
-        return kIOReturnBusy;
+        // 다른 스레드의 명령이 응답을 기다리는 중이다 (commandSleep 동안 게이트가 풀리므로 들어올 수 있다).
+        // 주기 전송(WI-2.005)과 다른 명령이 겹치므로 끝날 때까지 기다린다. 시간 초과된 명령은 복구(WI-1.006)가
+        // mCommandInFlight를 지우므로 여기서 영원히 기다리지 않는다. 그래도 기한을 넘기면 Busy로 돌려준다.
+        AbsoluteTime waitDeadline = 0;
+        clock_interval_to_deadline(kCommandTimeoutMs * 2, kMillisecondScale, &waitDeadline);
+        while (self->mCommandInFlight) {
+            if (self->mGate->commandSleep(&self->mCommandInFlight, waitDeadline, THREAD_UNINT) == kIOReturnTimeout) {
+                break;
+            }
+        }
+        if (self->mCommandInFlight) {
+            return kIOReturnBusy;
+        }
+        if (self->mTransport == nullptr || self->mQueues[v::gpu::kControlQueue] == nullptr) {
+            return kIOReturnNotReady;
+        }
     }
     const uint32_t requestBytes = static_cast<uint32_t *>(lengths)[0];
     const uint32_t responseBytes = static_cast<uint32_t *>(lengths)[1];
@@ -91,18 +105,23 @@ IOReturn VirtioGpuDevice::gatedSubmit(OSObject *owner, void *request, void *resp
             break;
         }
     }
+    // 끝나면(성공·시간 초과·버려짐 모두) 기다리는 다음 명령을 깨운다.
+    auto wakeWaiters = [self]() { self->mGate->commandWakeup(&self->mCommandInFlight, false); };
     if (!self->mCommandDone) {
         ++self->mCommandTimeouts;
         VV_LOG_ERR("gpu: command timed out after %u ms (head %u)", kCommandTimeoutMs, head);
         // 장치가 명령을 쥐고 있어 링을 더 쓸 수 없다. reset으로 되찾는다 (게이트 안이라 확인 명령은 미뤄진다).
         self->recoverDevice("command-timeout");
+        wakeWaiters();
         return kIOReturnTimeout;
     }
     if (!self->mCommandInFlight) {
         // 기다리는 사이 복구가 일어나 명령이 버려졌다.
+        wakeWaiters();
         return kIOReturnAborted;
     }
     self->mCommandInFlight = false;
+    wakeWaiters();
     bcopy(buffer + kResponseOffset, response, responseBytes);
     *static_cast<uint32_t *>(written) = self->mCommandWritten;
     return kIOReturnSuccess;

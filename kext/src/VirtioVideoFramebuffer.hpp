@@ -1,16 +1,37 @@
-// IOFramebuffer 하위 클래스.
-// 현재는 T-04 확인용 스텁이다 (PHASE-PLAN-02 "T-04 재조사"): IOGraphicsFamily 심볼(vtable·metaclass)을 쓰는
-// kext가 OpenCore 주입(부트 kernel collection)으로 로드되는지만 본다.
-// Info.plist에 personality가 없으므로 어떤 장치에도 붙지 않는다. 실제 구현은 WI-2.005에서 채운다.
+// IOFramebuffer 하위 클래스 (WI-2.005, REQ-001, REQ-031, REQ-051, REQ-052).
+//
+// 같은 PCI 장치에 붙어 있는 VirtioGpuDevice(별도 카테고리)를 찾아 그 프레임버퍼 메모리를 aperture로 쓴다.
+// 화면 출력(scanout·주기 전송)은 VirtioGpuDevice가 맡는다. 이 클래스는 IOGraphics가 요구하는 모드·픽셀 정보를
+// 보고하고 enableController에서 출력을 시작한다.
+//
+// 이 단계의 범위: 장치 선호 해상도 한 모드(기본 1280×800), 32bpp, 소프트웨어 커서, 감마는 받기만 한다.
+// 모드 목록·전환·EDID·VRAM 128 MiB 보고는 P3에서 한다.
+//
+// 매칭: IOPCIDevice, IOFramebuffer 카테고리, 점수 30000(IONDRVFramebuffer 20000보다 높게). boot-arg
+// `vvideo_takeover=1`이 없으면 probe에서 빠진다. IONDRV가 이미 붙어 있으면 점수만으로는 대체되지 않으므로
+// VirtioGpuDevice가 IONDRV를 내리고 매칭을 다시 돌린다 (VirtioGpuDeviceTakeover.cpp).
 #pragma once
 
 #include <IOKit/graphics/IOFramebuffer.h>
+
+#include "vv/DisplayMode.hpp"
+
+class VirtioGpuDevice;
+class VVDmaBuffer;
 
 class VirtioVideoFramebuffer : public IOFramebuffer {
     OSDeclareDefaultStructors(VirtioVideoFramebuffer)
 
 public:
+    IOService *probe(IOService *provider, SInt32 *score) override;
+    bool start(IOService *provider) override;
+    void stop(IOService *provider) override;
+    void free() override;
+
+    IOReturn enableController() override;
+    bool isConsoleDevice() override;
     IODeviceMemory *getApertureRange(IOPixelAperture aperture) override;
+    IODeviceMemory *getVRAMRange() override;
     const char *getPixelFormats() override;
     IOItemCount getDisplayModeCount() override;
     IOReturn getDisplayModes(IODisplayModeID *allDisplayModes) override;
@@ -20,4 +41,18 @@ public:
     IOReturn getPixelInformation(IODisplayModeID displayMode, IOIndex depth,
                                  IOPixelAperture aperture, IOPixelInformation *pixelInfo) override;
     IOReturn getCurrentDisplayMode(IODisplayModeID *displayMode, IOIndex *depth) override;
+    IOReturn setDisplayMode(IODisplayModeID displayMode, IOIndex depth) override;
+    IOReturn getStartupDisplayMode(IODisplayModeID *displayMode, IOIndex *depth) override;
+    IOReturn setGammaTable(UInt32 channelCount, UInt32 dataCount, UInt32 dataWidth, void *data) override;
+    IOReturn getAttribute(IOSelect attribute, uintptr_t *value) override;
+    IOReturn getAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t *value) override;
+
+private:
+    static VirtioGpuDevice *findGpuDevice(IOService *pci);
+    IODeviceMemory *makeApertureRange() const;
+
+    VirtioGpuDevice *mGpu = nullptr;       // retain
+    VVDmaBuffer *mBuffer = nullptr;        // retain: GPU 서비스가 먼저 멈춰도 aperture가 해제된 메모리를 가리키지 않게
+    vv::display::Mode mMode{};
+    bool mScanoutStarted = false;
 };

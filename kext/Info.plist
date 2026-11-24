@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.21</string>
+	<string>0.0.22</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.21</string>
+	<string>0.0.22</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>VirtioGpuDevice</key>
@@ -30,6 +30,21 @@
 			<string>VirtioVideoGpu</string>
 			<key>IOPCIMatch</key>
 			<string>0x10501af4</string>
+			<key>IOProviderClass</key>
+			<string>IOPCIDevice</string>
+		</dict>
+		<key>VirtioVideoFramebuffer</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>local.virtiovideo.VirtioVideo</string>
+			<key>IOClass</key>
+			<string>VirtioVideoFramebuffer</string>
+			<key>IOMatchCategory</key>
+			<string>IOFramebuffer</string>
+			<key>IOPCIMatch</key>
+			<string>0x10501af4</string>
+			<key>IOProbeScore</key>
+			<integer>30000</integer>
 			<key>IOProviderClass</key>
 			<string>IOPCIDevice</string>
 		</dict>

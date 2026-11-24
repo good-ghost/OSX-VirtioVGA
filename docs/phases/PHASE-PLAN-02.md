@@ -265,6 +265,24 @@ personality 초안:
 - 시스템 설정의 허용 버튼은 서명 없는 kext에 효과가 없었고 `-z`(승인 검사 건너뛰기)가 필요했다.
 - 이로써 WI-2.005 본 구현(personality, scanout, takeover)을 이 경로로 진행할 수 있다.
 
+### WI-2.005 2차 시도 실기 (2026-11-24, kext 0.0.22, 보조 collection, `vvideo_takeover=1`)
+
+| 부팅 | 결과 |
+| ---- | ---- |
+| 1차 | 약 69초에 **커널 패닉** 후 자동 재부팅. `Kernel-2026-11-24-052540.panic`: page fault(CR2=0) in `AppleUpstreamUserClientDriver::fbNotificationOccurred` ← `IOFramebuffer::deliverGroupNotification` ← `IOFramebuffer::terminate` ← **우리 `runTakeover()`(IONDRV `terminate()` 호출, VirtioGpuDeviceTakeover.cpp:103)**. Apple 드라이버가 실행 중 프레임버퍼 종료 알림을 처리하다 NULL을 참조했다 |
+| 2차 | 패닉 없음. `VVTakeover`: `scheduled ignore-ndrv-set ndrv-terminate-requested ndrv-detached rematch framebuffer-attached`. `VirtioVideoFramebuffer`가 PCI 장치에 붙고 `fb: started 1280x800`. **그러나 `enableController`가 불리지 않아 scanout이 시작되지 않았다**(`VVScanout` 없음). 프레임버퍼 전원 상태 `CurrentPowerState=0`, 아래에 `IODisplayConnect`가 없고 `AppleMCCSControlModule`, `AppleUpstreamUserClientDriver`만 붙음. `system_profiler`에 디스플레이 항목 없음. QEMU 창은 VGA(BAR0) 그대로라 사용자에게는 변화 없이 보였다 |
+
+판단
+
+1. **실행 중 IONDRV 종료는 Apple 드라이버 쪽 경쟁 조건으로 패닉을 낼 수 있다** (두 번 중 한 번). 이 방식의 takeover는 쓰지 않는다.
+2. 실행 중에 새로 붙은 IOFramebuffer가 전원 상태 0에서 올라오지 않았다. IOFramebuffer의 전원 처리(`kIOPowerAttribute`)를 하위 클래스가 구현해야 하는지, 부팅 중(WindowServer 시작 전)에 붙어야 하는지 확인이 필요하다.
+
+다음 방향 (제안, 승인 필요)
+
+- **부팅 때부터 IONDRV가 붙지 않게 한다**: OpenCore `DeviceProperties > Add`로 GPU PCI 장치에 `AAPL,iokit-ignore-ndrv`를 넣는다. 그러면 실행 중 종료가 필요 없고, 우리 프레임버퍼가 보조 collection 로드 때 바로 붙는다 (일반 GPU 드라이버와 같은 경로). 실패하면 프레임버퍼가 하나도 없게 되므로, 되돌리기는 OC 속성 제거 또는 SSH.
+- 그와 함께 `kIOPowerAttribute` 처리와 전원 상태 변화를 VVLog로 남겨 `enableController`가 불리는 조건을 확인한다.
+- 그 전까지는 boot-args에서 `vvideo_takeover=1`을 빼 패닉 위험을 없앤다.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

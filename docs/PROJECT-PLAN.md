@@ -87,7 +87,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | Status | ID        | Description                                         | Man-day |
 | ------ | --------- | --------------------------------------------------- | ------- |
 | [X]    | WI-1.001  | AppleVirtIOPCITransport 공존 조사                   | 1.5     |
-| [ ]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
+| [X]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
 | [ ]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
 | [ ]    | WI-1.004  | split virtqueue                                     | 2       |
 | [ ]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
@@ -99,9 +99,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 공존 방법(그대로 둠 / 매칭 조정 / 우선 점유) 중 하나를 근거와 함께 정했다 — A(공존). 점수로 밀어내기는 로드 시점 때문에 실패(실측). 대안 C(kext 분리) 기록
   - [X] 결정이 REQ-003에 맞는지 확인했다 — 세 서비스 동시 부착 상태로 부팅·화면 정상. 우리 초기화 후 상태 유지는 WI-1.003에서 확인
 - WI-1.002
-  - [ ] vendor capability(`cfg_type` 1~5)를 모두 찾아 BAR·오프셋·길이를 로그로 남긴다
-  - [ ] 범위가 BAR 크기를 넘는 capability를 거절하는 단위 테스트가 통과한다
-  - [ ] 실제 장치에서 찾은 값을 PHASE-PLAN-01 실측표에 기록했다
+  - [X] vendor capability(`cfg_type` 1~5)를 모두 찾아 BAR·오프셋·길이를 로그로 남긴다 (`VVVirtioCaps`, `VVLog`)
+  - [X] 범위가 BAR 크기를 넘는 capability를 거절하는 단위 테스트가 통과한다 (`VirtioPciLayoutTests`, `PciCapWalkTests`)
+  - [X] 실제 장치에서 찾은 값을 PHASE-PLAN-01 실측표에 기록했다 (WI-1.001 실측과 0.0.9 전송 계층 결과 일치)
 - WI-1.003
   - [ ] reset → ACKNOWLEDGE → DRIVER → feature → FEATURES_OK 재확인 → DRIVER_OK 순서로 진행한다
   - [ ] `VIRTIO_F_VERSION_1`이 없으면 실패한다

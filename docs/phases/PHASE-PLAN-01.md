@@ -138,3 +138,14 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 - `vv/PciCapWalk.hpp`(capability 순회·검증)를 이번에 만들었다. WI-1.002는 이것을 전송 계층에 연결하는 작업이 된다.
 - 빌드: `IOPCIDevice`가 "Use PCIDriverKit"으로 deprecated라 `-Wno-error=deprecated-declarations`를 추가했다 (경고는 그대로 보인다).
 
+### WI-1.002 (2026-11-24)
+
+- `vv/VirtioPciLayout.hpp`: capability 목록에서 common/notify/isr/device를 종류마다 "BAR 범위 안, 최소 길이 충족"인 첫 것으로 고른다 (§4.1.4의 SHOULD). 최소 길이: common 56바이트(VIRTIO 1.0 필드 끝), isr 1, notify 2, device는 장치별(GPU 16). `notify_off_multiplier`는 0 또는 짝수 2의 거듭제곱만 허용. 큐 알림 오프셋 경계 계산 포함.
+- `VirtioPciTransport`(OSObject): 레이아웃을 고르고 영역이 있는 BAR를 `kIOMapInhibitCache`로 한 번씩 매핑한다. 매핑 길이도 영역 끝과 다시 비교한다. 레지스터 읽기는 영역 경계를 넘으면 0과 실패를 돌려준다. 쓰기는 WI-1.003에서 더한다.
+- 진단 서비스(`VirtioVideoPciProbe`)가 이 전송 계층을 쓰도록 바꿨다.
+- 실기 확인 (kext 0.0.9, 수집본 `env-*-wi1002-transport.txt`):
+  - `VVLayoutResult = none`, `VVLayout = common=2:0x1000 notify=2:0x3000 isr=2:0x1800 device=2:0x2000 mult=4` — WI-1.001 실측표와 같다.
+  - common 영역 끝을 넘는 32비트 읽기(`length-2`)가 거절됨 (`VVBoundsCheckRejected = Yes`).
+  - 장치 상태는 이전과 같다 (status=ACK, nq=2, scanouts=1). 부팅·화면 정상.
+- 단위 테스트 23개 통과.
+

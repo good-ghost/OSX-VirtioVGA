@@ -154,5 +154,5 @@ VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.7, UUID `DB2E0CF9-CD0C-3062-82BC-8D2ED457574D` (dSYM은 `build/dsym-archive/`). 0.0.7의 진단 서비스는 GPU 장치에 붙지 않는다(WI-1.001 실측 2). 저장소의 최신 빌드는 0.0.8(별도 카테고리로 되돌림)이며 다음 EFI 작업 때 설치한다
+- EFI의 kext 버전: 0.0.9, UUID `67FC1D50-9D79-33EA-8907-274EF2861EAC` (dSYM은 `build/dsym-archive/`). 진단 서비스 `VirtioVideoPciProbe`가 GPU 장치에 별도 카테고리로 붙어 읽기만 한다
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

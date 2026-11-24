@@ -6,6 +6,7 @@
 #include <libkern/c++/OSString.h>
 
 #include "VVBootArgs.hpp"
+#include "VirtioPciTransport.hpp"
 #include "VVLog.hpp"
 #include "vv/PciCapWalk.hpp"
 #include "vv/VirtioGpuSpec.hpp"
@@ -17,20 +18,6 @@ namespace {
 
 constexpr size_t kMaxVirtioCaps = 8;
 constexpr size_t kCapLineBytes = 96;
-constexpr uint8_t kBarRegisterStride = 4;
-
-uint8_t barRegister(uint8_t bar)
-{
-    return static_cast<uint8_t>(kIOPCIConfigBaseAddress0 + kBarRegisterStride * bar);
-}
-
-// MMIO 읽기. 컴파일러가 접근을 합치거나 없애지 않도록 volatile로 읽는다.
-template <typename T>
-T mmioRead(IOVirtualAddress base, uint32_t offset)
-{
-    return *reinterpret_cast<volatile T *>(base + offset);
-}
-
 } // namespace
 
 IOService *VirtioVideoPciProbe::probe(IOService *provider, SInt32 *score)
@@ -105,37 +92,19 @@ void VirtioVideoPciProbe::publishVirtioCaps(IOPCIDevice *pci)
     auto read8 = [pci](uint8_t offset) { return pci->configRead8(offset); };
     auto read32 = [pci](uint8_t offset) { return pci->configRead32(offset); };
 
+    // 진단용: 장치가 보고한 capability를 거르지 않고 모두 기록한다.
     vv::pci::VirtioCap caps[kMaxVirtioCaps] = {};
     const size_t count = vv::pci::findVirtioCaps(read8, read32, caps, kMaxVirtioCaps);
-    VV_LOG_INFO("pciprobe: %zu virtio caps", count);
-
     OSArray *lines = OSArray::withCapacity(static_cast<unsigned>(count));
-    const vv::pci::VirtioCap *common = nullptr;
-    const vv::pci::VirtioCap *device = nullptr;
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count && lines != nullptr; ++i) {
         const auto &cap = caps[i];
-        IODeviceMemory *barMemory = pci->getDeviceMemoryWithRegister(barRegister(cap.bar));
-        const uint64_t barSize = barMemory != nullptr ? barMemory->getLength() : 0;
-        const bool within = v::pci::isCapWithinBar(cap.offset, cap.length, barSize);
         char line[kCapLineBytes];
-        snprintf(line, sizeof(line), "at=0x%02x type=%u bar=%u off=0x%x len=0x%x barsize=0x%llx ok=%d mult=%u",
-                 cap.capOffset, cap.cfgType, cap.bar, cap.offset, cap.length, barSize, within,
-                 cap.notifyOffMultiplier);
-        VV_LOG_INFO("pciprobe: cap %s", line);
-        if (lines != nullptr) {
-            OSString *string = OSString::withCString(line);
-            if (string != nullptr) {
-                lines->setObject(string);
-                string->release();
-            }
-        }
-        if (!within) {
-            continue;
-        }
-        if (cap.cfgType == v::pci::capType::kCommonCfg && common == nullptr) {
-            common = &cap;
-        } else if (cap.cfgType == v::pci::capType::kDeviceCfg && device == nullptr) {
-            device = &cap;
+        snprintf(line, sizeof(line), "at=0x%02x type=%u bar=%u off=0x%x len=0x%x mult=%u", cap.capOffset,
+                 cap.cfgType, cap.bar, cap.offset, cap.length, cap.notifyOffMultiplier);
+        OSString *string = OSString::withCString(line);
+        if (string != nullptr) {
+            lines->setObject(string);
+            string->release();
         }
     }
     if (lines != nullptr) {
@@ -143,53 +112,52 @@ void VirtioVideoPciProbe::publishVirtioCaps(IOPCIDevice *pci)
         lines->release();
     }
 
-    if (common == nullptr || common->length < sizeof(v::pci::PciCommonCfg)) {
-        VV_LOG_ERR("pciprobe: common cfg not usable");
+    // 전송 계층으로 영역을 고르고 매핑한다 (WI-1.002). 장치에는 쓰지 않는다.
+    v::pci::LayoutError error = v::pci::LayoutError::None;
+    VirtioPciTransport *transport = VirtioPciTransport::withDevice(pci, sizeof(v::gpu::Config), &error);
+    setProperty("VVLayoutResult", v::pci::layoutErrorName(error));
+    if (transport == nullptr) {
+        VV_LOG_ERR("pciprobe: transport init failed (%s)", v::pci::layoutErrorName(error));
         return;
     }
-    // 읽기 전용 매핑. select 레지스터에 쓰지 않으므로 device_feature는 현재 select된 32비트 절반이다.
-    IOMemoryMap *map = pci->mapDeviceMemoryWithRegister(barRegister(common->bar), kIOMapInhibitCache);
-    if (map == nullptr) {
-        VV_LOG_ERR("pciprobe: map BAR%u failed", common->bar);
-        return;
-    }
-    const IOVirtualAddress base = map->getVirtualAddress() + common->offset;
+    const auto &layout = transport->layout();
+    char summary[kCapLineBytes];
+    snprintf(summary, sizeof(summary), "common=%u:0x%x notify=%u:0x%x isr=%u:0x%x device=%u:0x%x mult=%u",
+             layout.common.bar, layout.common.offset, layout.notify.bar, layout.notify.offset, layout.isr.bar,
+             layout.isr.offset, layout.device.bar, layout.device.offset, layout.notifyOffMultiplier);
+    setProperty("VVLayout", summary);
+
     using Cfg = v::pci::PciCommonCfg;
-    const uint32_t featureSelect = mmioRead<uint32_t>(base, offsetof(Cfg, deviceFeatureSelect));
-    const uint32_t deviceFeature = mmioRead<uint32_t>(base, offsetof(Cfg, deviceFeature));
-    const uint32_t driverSelect = mmioRead<uint32_t>(base, offsetof(Cfg, driverFeatureSelect));
-    const uint32_t driverFeature = mmioRead<uint32_t>(base, offsetof(Cfg, driverFeature));
-    const uint16_t msixConfigVector = mmioRead<uint16_t>(base, offsetof(Cfg, configMsixVector));
-    const uint16_t numQueues = mmioRead<uint16_t>(base, offsetof(Cfg, numQueues));
-    const uint8_t deviceStatus = mmioRead<uint8_t>(base, offsetof(Cfg, deviceStatus));
-    const uint8_t configGeneration = mmioRead<uint8_t>(base, offsetof(Cfg, configGeneration));
-    const uint16_t queueSelect = mmioRead<uint16_t>(base, offsetof(Cfg, queueSelect));
-    const uint16_t queueEnable = mmioRead<uint16_t>(base, offsetof(Cfg, queueEnable));
+    using Gpu = v::gpu::Config;
+    // select 레지스터에 쓰지 않으므로 device_feature는 현재 select된 32비트 절반이다.
+    const uint8_t deviceStatus = transport->commonRead8(offsetof(Cfg, deviceStatus));
+    const uint32_t featureSelect = transport->commonRead32(offsetof(Cfg, deviceFeatureSelect));
+    const uint32_t deviceFeature = transport->commonRead32(offsetof(Cfg, deviceFeature));
+    const uint32_t driverFeature = transport->commonRead32(offsetof(Cfg, driverFeature));
+    const uint16_t msixConfigVector = transport->commonRead16(offsetof(Cfg, configMsixVector));
+    const uint16_t numQueues = transport->commonRead16(offsetof(Cfg, numQueues));
+    const uint16_t queueEnable = transport->commonRead16(offsetof(Cfg, queueEnable));
+    const uint32_t numScanouts = transport->deviceRead32(offsetof(Gpu, numScanouts));
+    const uint32_t eventsRead = transport->deviceRead32(offsetof(Gpu, eventsRead));
+
+    // 영역 경계 검사 확인: common 영역 끝을 넘는 읽기는 거절되어야 한다.
+    bool outOfRangeOk = true;
+    transport->commonRead32(layout.common.length - 2, &outOfRangeOk);
+    setProperty("VVBoundsCheckRejected", !outOfRangeOk);
 
     setProperty("VVDeviceStatus", deviceStatus, 8);
     setProperty("VVDeviceFeatureSelect", featureSelect, 32);
     setProperty("VVDeviceFeature", deviceFeature, 32);
-    setProperty("VVDriverFeatureSelect", driverSelect, 32);
     setProperty("VVDriverFeature", driverFeature, 32);
     setProperty("VVConfigMsixVector", msixConfigVector, 16);
     setProperty("VVNumQueues", numQueues, 16);
-    setProperty("VVConfigGeneration", configGeneration, 8);
-    setProperty("VVQueueSelect", queueSelect, 16);
     setProperty("VVQueueEnable", queueEnable, 16);
-    VV_LOG_INFO("pciprobe: status=0x%02x devfeat[%u]=0x%08x drvfeat[%u]=0x%08x msixcfg=0x%04x nq=%u gen=%u qsel=%u qen=%u",
-                deviceStatus, featureSelect, deviceFeature, driverSelect, driverFeature, msixConfigVector, numQueues,
-                configGeneration, queueSelect, queueEnable);
-
-    if (device != nullptr && device->bar == common->bar && device->length >= sizeof(v::gpu::Config)) {
-        const IOVirtualAddress dev = map->getVirtualAddress() + device->offset;
-        using Gpu = v::gpu::Config;
-        const uint32_t eventsRead = mmioRead<uint32_t>(dev, offsetof(Gpu, eventsRead));
-        const uint32_t numScanouts = mmioRead<uint32_t>(dev, offsetof(Gpu, numScanouts));
-        const uint32_t numCapsets = mmioRead<uint32_t>(dev, offsetof(Gpu, numCapsets));
-        setProperty("VVGpuEventsRead", eventsRead, 32);
-        setProperty("VVGpuNumScanouts", numScanouts, 32);
-        setProperty("VVGpuNumCapsets", numCapsets, 32);
-        VV_LOG_INFO("pciprobe: gpu events=0x%x scanouts=%u capsets=%u", eventsRead, numScanouts, numCapsets);
-    }
-    map->release();
+    setProperty("VVGpuNumScanouts", numScanouts, 32);
+    setProperty("VVGpuEventsRead", eventsRead, 32);
+    VV_LOG_INFO("pciprobe: %s", summary);
+    VV_LOG_INFO("pciprobe: status=0x%02x devfeat[%u]=0x%08x drvfeat=0x%08x msixcfg=0x%04x nq=%u qen=%u scanouts=%u "
+                "bounds-reject=%d",
+                deviceStatus, featureSelect, deviceFeature, driverFeature, msixConfigVector, numQueues, queueEnable,
+                numScanouts, !outOfRangeOk);
+    transport->release();
 }

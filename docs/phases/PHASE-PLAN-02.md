@@ -205,6 +205,22 @@ personality 초안:
 - scanout을 끄면(resource 0) VGA로 돌아가지 않고 "Display output is not active"가 된다.
 - **장치를 reset하면 VGA 출력으로 돌아간다.** 그래서 WI-2.006 이후 드라이버가 화면을 넘겨받은 뒤 실패하면 장치를 reset해 펌웨어 화면(IONDRV/BAR0)으로 되돌리는 것을 안전장치로 쓴다 (REQ-005, AC-06).
 
+### WI-2.005 1차 시도와 코드 유실 (2026-11-24)
+
+자세한 경과는 [../WI-2.004.md](../WI-2.004.md) §4~§7 (Remote Control 세션 기록에서 복원).
+
+- kext 0.0.20: `VirtioVideoFramebuffer`(IOFramebuffer, 1280×800, 물리 연속 aperture, `VVDmaBuffer` retain), `VirtioGpuDeviceScanout.cpp`(약 16ms 주기 전체 flush), takeover(`vvideo_takeover=1`, 시작 60초 뒤 `AAPL,iokit-ignore-ndrv` → IONDRV 종료 → 재매칭), personality `IOFramebuffer` 카테고리 점수 30000. 빌드 0, 테스트 63개 통과.
+- boot-args `keepsyms=1 vvideo_takeover=1`로 첫 재부팅: **kext가 로드되지 않음**(로그에 이름조차 없음), 부팅·화면은 정상. 가설: IOFramebuffer 상속으로 IOGraphicsFamily 심볼이 필요해져 OC 주입 단계에서 버려짐 (T-04).
+- 원인 확인용으로 OC `Misc > Debug > Target=65`, DisplayLevel INFO를 켜고 재부팅 → **Apple 로고에서 멈춤** → 사용자가 호스트 스냅샷 "WI-001"로 복구.
+- 코드는 커밋 전이라 유실. 패닉·OC 로그도 사라짐. KDK도 지워짐(재설치 필요).
+- 판단: 멈춘 부팅의 직전 변경은 OC 로그 설정뿐이었다. kext 0.0.20이 멈춤의 원인이라는 근거는 없다 (확인 못 함).
+
+재시도 방침
+
+- T-04를 먼저 가른다: 메서드 스텁만 있는 최소 IOFramebuffer 하위 클래스가 OC 주입으로 로드되는지 확인한다.
+- OC 파일 로그는 켜지 않는다. 필요하면 `-v` 화면 로그나 호스트 직렬 로그(`-serial file:…`, boot-arg `serial=3`)를 쓰고, OC 설정 변경은 kext 변경과 다른 부팅에서 단독으로 한다.
+- 시험 전 VM을 끄고 호스트 스냅샷, **설치 전 커밋·푸시**.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

@@ -39,5 +39,6 @@ WI 하나를 끝낼 때 다음 순서를 지킨다.
 - 사양 상수·구조체는 `kext/include/vv/VirtioSpec.hpp`, `VirtioGpuSpec.hpp`에만 둔다. 매직 넘버를 코드에 직접 쓰지 않는다.
 - 드라이버 로그: 통합 로그에는 남지 않는다. `ioreg -r -c <클래스> -l -w0 | grep '"VV'`로 `VVLog` 속성을 읽는다. 수준은 boot-arg `vvideo_log=0|1|2`.
 - 시스템 로그를 볼 때는 `/usr/bin/log`를 쓴다 (zsh에서 `log`는 내장 명령).
+- 커널 패닉: `python3 -I scripts/panic-summary.py [보고서]`. build.sh가 dSYM을 `build/dsym-archive/<UUID>.dSYM`에 보관하므로 `build/`를 지우지 않는다. 자세한 절차는 docs/DEBUGGING.md.
 - 드라이버 적용 전/후 비교: `scripts/collect-env.sh --save <label>`로 `docs/research/env-<시각>-<label>.txt`에 저장하고 `scripts/compare-env.sh <이전> <이후>`로 비교한다 (종료 코드 0 = 차이 없음, 1 = 차이 있음). 부팅마다 바뀌는 값은 비교에서 지운다.
 - 화면 확인 결과는 `docs/screenshots/`, 녹화는 `docs/movie/`에 남긴다.

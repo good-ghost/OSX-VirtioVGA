@@ -80,4 +80,19 @@ done
 
 cp "$INFO_PLIST" "$BUNDLE/Contents/Info.plist"
 
+# 패닉 백트레이스를 소스 줄로 바꾸려면(atos) 디버그 심볼이 필요하다 (WI-0.004, docs/DEBUGGING.md).
+# dSYM은 kext 번들 밖에 둔다. EFI에는 번들만 복사한다.
+readonly DSYM="$BUILD_DIR/$KEXT_NAME.kext.dSYM"
+rm -rf "$DSYM"
+"$(xcrun --find dsymutil)" "$BUNDLE/Contents/MacOS/$KEXT_NAME" -o "$DSYM"
+
+# 다시 빌드해도 예전 패닉을 해석할 수 있도록 UUID별로 보관한다. scripts/panic-summary.py가 UUID로 찾는다.
+readonly DSYM_ARCHIVE="$BUILD_DIR/dsym-archive"
+KEXT_UUID="$(dwarfdump --uuid "$BUNDLE/Contents/MacOS/$KEXT_NAME" | awk '/x86_64/ { print $2; exit }')"
+readonly KEXT_UUID
+mkdir -p "$DSYM_ARCHIVE"
+rm -rf "$DSYM_ARCHIVE/$KEXT_UUID.dSYM"
+cp -R "$DSYM" "$DSYM_ARCHIVE/$KEXT_UUID.dSYM"
+
 echo "built $BUNDLE ($BUNDLE_ID $VERSION, $CONFIG)"
+echo "dsym  $DSYM"

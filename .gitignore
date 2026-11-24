@@ -25,3 +25,6 @@ docs/movie/raw/
 
 # OpenCore config.plist 사본 (SMBIOS 일련번호·MLB·UUID 포함 — 커밋 금지)
 docs/research/efi/
+
+# Python 캐시
+__pycache__/

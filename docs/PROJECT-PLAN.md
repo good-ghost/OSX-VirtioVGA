@@ -43,7 +43,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-0.001  | 빌드 체계 결정과 빈 kext 빌드                       | 1.5     |
 | [X]    | WI-0.002  | OpenCore 주입으로 최소 kext 로드 확인               | 1       |
 | [X]    | WI-0.003  | 롤백 절차와 비활성화 boot-arg                       | 1       |
-| [ ]    | WI-0.004  | KDK·QEMU gdbstub 디버깅과 패닉 로그 수집 절차       | 1.5     |
+| [X]    | WI-0.004  | KDK·QEMU gdbstub 디버깅과 패닉 로그 수집 절차       | 1.5     |
 | [X]    | WI-0.005  | 로깅 매크로와 로그 수준                             | 0.5     |
 | [X]    | WI-0.006  | 사용자 공간 단위 테스트 하네스                      | 1       |
 | [X]    | WI-0.007  | 환경 수집 스크립트 비교 모드                        | 0.5     |
@@ -65,9 +65,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] boot-arg `-vvideooff`가 있으면 `probe()`가 `nullptr`를 돌려준다
   - [X] boot-arg를 넣고 부팅해 `IONDRVFramebuffer`가 유지되는 것을 확인했다
 - WI-0.004
-  - [ ] 24H241용 KDK(또는 가장 가까운 빌드) 설치 결과를 기록했다
-  - [ ] QEMU gdbstub에 lldb로 붙어 kext 심볼에 중단점을 거는 절차를 `docs/DEBUGGING.md`에 적었다
-  - [ ] 패닉 보고서 위치와 수집 명령을 적었다
+  - [X] 24H241용 KDK(또는 가장 가까운 빌드) 설치 결과를 기록했다 (정확히 24H241, UUID 일치)
+  - [X] QEMU gdbstub에 lldb로 붙어 kext 심볼에 중단점을 거는 절차를 `docs/DEBUGGING.md`에 적었다 — 연결·kext 심볼·메모리 읽기 확인, 중단점 적중은 실행 경로가 생기는 P1에서 확인. 커널 심볼은 lldb 19 충돌로 불가
+  - [X] 패닉 보고서 위치와 수집 명령을 적었다 (`scripts/panic-summary.py`, dSYM UUID 보관)
 - WI-0.005
   - [X] 오류/정보/디버그 세 수준의 로그 매크로가 있다
   - [X] boot-arg 또는 Info.plist 값으로 수준을 바꿀 수 있고, 바뀐 것을 로그로 확인했다

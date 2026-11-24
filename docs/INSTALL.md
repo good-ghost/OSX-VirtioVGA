@@ -26,6 +26,7 @@ kext는 커널에서 돈다. 설치 전에 반드시 §1의 준비를 마친다.
    게스트 디스크가 qcow2가 아니면 이미지 파일을 복사해 둔다.
 
 2. 빌드: `scripts/build.sh` (종료 코드 0), `kmutil print-diagnostics -p build/VirtioVideo.kext`에서 `Dependencies: OK`.
+3. 설치할 빌드의 dSYM이 `build/dsym-archive/<UUID>.dSYM`에 있는지 확인한다 (패닉 분석에 필요, [DEBUGGING.md §2.3](DEBUGGING.md)). UUID: `dwarfdump --uuid build/VirtioVideo.kext/Contents/MacOS/VirtioVideo`
 
 ## 2. EFI 마운트
 
@@ -147,9 +148,11 @@ VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같
 | `config.plist.bak-20261123-wi0002`    | WI-0.002 첫 설치 전               | VirtioVideo 항목이 없는 원래 설정          |
 | `config.plist.bak-20261123-wi0005`    | WI-0.005 boot-args 변경 전        | VirtioVideo 항목 있음, boot-args `keepsyms=1` |
 | `config.plist.bak-20261123-wi0003`    | WI-0.003 시험 전                  | VirtioVideo 항목 있음(Enabled=true), boot-args `keepsyms=1 vvideo_log=0` |
+| `config.plist.bak-20261123-wi0004`    | WI-0.004 kext 재활성화 전         | VirtioVideo 항목 있음(Enabled=false), boot-args `keepsyms=1` |
 
 ## 7. 현재 상태 (2026-11-23)
 
 - boot-args: `keepsyms=1`
-- `Kernel > Add:8` VirtioVideo: `Enabled=false` — kext를 로드하지 않는다. 다시 쓰려면 §4.2의 명령에서 `false`를 `true`로 바꾼다.
-- EFI의 kext 버전: 0.0.4
+- `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
+- EFI의 kext 버전: 0.0.5, UUID `935ADD8D-1FAD-37A7-A84E-72A47E4D92F7` (dSYM은 `build/dsym-archive/`)
+- QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

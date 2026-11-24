@@ -291,4 +291,26 @@ WI-0.003에서 boot-args를 `keepsyms=1`로 되돌렸다.
 - 기준 수집본: `docs/research/env-20261123-225333-wi0007-a.txt` (VirtioVideo `Enabled=false` 상태). 최초 기준본 `2026-11-23-env-before.txt`는 이전 형식이라 비교하면 머리말·새 절 차이가 함께 나온다.
 - 확인하지 못한 것: 드라이버 객체가 있을 때의 `VV*` 속성 수집은 kext가 비활성 상태라 이번에 실행해 보지 못했다. 다음에 kext를 켜는 WI에서 확인한다.
 
+### WI-0.004 디버깅 절차 (2026-11-23)
+
+게스트에서 끝낸 것
+
+- `scripts/build.sh`가 dSYM(`build/VirtioVideo.kext.dSYM`)을 만들고 `build/dsym-archive/<UUID>.dSYM`에 보관한다. 바이너리와 dSYM UUID 일치 확인.
+- 빌드할 때마다 kext UUID가 바뀐다 (연속 두 빌드에서 다른 UUID 확인). 그래서 UUID별 보관이 필요하다.
+- `atos -l <로드 주소>`로 kext 주소 → `VirtioVideoProbe::start(IOService*) (VirtioVideoProbe.cpp:24)` 변환 확인.
+- `scripts/panic-summary.py`: 최근 `Kernel-*.panic` 요약, 이 kext 로드 범위의 프레임만 골라 UUID가 맞는 dSYM으로 변환. 실제 보고서(이 kext 없음)와 합성 보고서(이 kext 있음, 현재 dSYM 없음 → 보관소에서 찾음, UUID 불일치 → 주소만 출력)로 확인.
+- 패닉 보고서는 `/Library/Logs/DiagnosticReports/Kernel-*.panic`, 일반 사용자로 읽힌다. 형식은 1행 메타 JSON + 본문 JSON(`macOSPanicString`).
+- 기존 패닉 3건(11-19, 11-22, 11-23 18:53, macOS 15.7.9)은 드라이버 설치 전의 `xcpm` spinlock timeout이다. DEBUGGING.md §2.4에 기록.
+- `docs/DEBUGGING.md` 작성.
+
+호스트·KDK 결과
+
+- KDK: `KDK_15.8.3_24H241.kdk` 설치(사용자), 실행 중인 커널과 UUID 일치(`747934E9-…`). 게스트에서 KDK 심볼 정적 조회 가능.
+- QEMU: `-gdb tcp:127.0.0.1:1234` (사용자). 호스트 lldb는 distrobox `gen-dev`의 LLVM lldb 19.1.7.
+- lldb 19.1.7은 KDK 커널 바이너리를 열면 segmentation fault(무한 재귀로 추정, dSYM 유무와 무관). 그래서 `darwin-kernel.scan-type none`으로 커널 자동 탐색을 끄고 kext만 붙였다.
+- kext 0.0.5(로드 주소 `0xffffff80040e4000`)에 붙어 `kmod_info`+0x10 주소에서 `"local.virtiovideo.VirtioVideo"`를 읽었다 → gdbstub 연결과 kext 심볼 주소가 맞다. `process detach`로 VM 재개.
+- 확인 못 함: 중단점 적중(실행 중 호출되는 kext 경로가 아직 없음), 부팅 중 `start()` 정지, 커널 심볼(새 lldb 필요). DEBUGGING.md §3.4에 기록.
+- 주의: 붙은 상태에서 lldb를 `quit`하면 kill로 QEMU가 꺼질 수 있다. 항상 `process detach` 먼저.
+
+
 > 이 문서의 코드·설정 예시는 의도를 보여 주는 스케치다. 구현할 때는 SDK 헤더, 실제 빌드 출력, 사용자의 OpenCore 설정이 우선한다.

@@ -128,8 +128,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | ------ | --------- | --------------------------------------------------- | ------- |
 | [X]    | WI-2.001  | GPU 명령 계층 (직렬화·타임아웃·응답 검사)           | 1.5     |
 | [X]    | WI-2.002  | display info 조회                                   | 0.5     |
-| [ ]    | WI-2.003  | 프레임버퍼 메모리 풀과 backing                      | 1.5     |
-| [ ]    | WI-2.004  | 2D resource 생명주기와 픽셀 형식                    | 1.5     |
+| [X]    | WI-2.003  | 프레임버퍼 메모리 풀과 backing                      | 1.5     |
+| [X]    | WI-2.004  | 2D resource 생명주기와 픽셀 형식                    | 1.5     |
 | [ ]    | WI-2.005  | IOFramebuffer 하위 클래스 (고정 모드)               | 2.5     |
 | [ ]    | WI-2.006  | 부트 프레임버퍼 대체 (매칭·probe score)             | 1.5     |
 | [ ]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
@@ -146,10 +146,10 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 - WI-2.003
   - [X] 128 MiB 상한의 메모리 풀에서 모드 크기만큼 할당한다 (`VVFramebuffer` 1280×800 4,096,000바이트)
   - [X] `getApertureRange()`에 쓸 수 있는 메모리 형태(물리 연속 여부)를 실측으로 정하고 기록했다 (PHASE-PLAN-02 T-01) — 물리 연속 할당, 16 MiB도 부팅 직후 성공, IOMMU 변환 없음
-  - [ ] `ATTACH_BACKING` 항목 목록을 만들어 보낸다 — 목록 생성(`vv/MemEntries.hpp`)과 테스트까지 완료. 전송은 resource가 생기는 WI-2.004에서
+  - [X] `ATTACH_BACKING` 항목 목록을 만들어 보낸다 — 목록 생성(`vv/MemEntries.hpp`), WI-2.004 시험 패턴에서 전송 성공(항목 1개, 4,096,000바이트)
 - WI-2.004
-  - [ ] create → attach → set_scanout → transfer → flush → detach → unref가 오류 없이 돈다
-  - [ ] 색상 패턴(빨강·초록·파랑·흰색)이 바르게 보인다 (AC-04, 스크린샷)
+  - [X] create → attach → set_scanout → transfer → flush → detach → unref가 오류 없이 돈다 (실기: 명령 10개 성공, 시간 초과 0)
+  - [X] 색상 패턴(빨강·초록·파랑·흰색)이 바르게 보인다 (AC-04, 스크린샷) — 사용자가 QEMU 창에서 왼쪽부터 빨강·초록·파랑·흰색으로 확인. 호스트 캡처는 받지 못함
 - WI-2.005
   - [ ] `IOFramebuffer` 필수 메서드를 구현하고 1280×800 한 모드를 보고한다
   - [ ] `setGammaTable`이 성공을 돌려준다, 하드웨어 커서 미지원을 보고한다

@@ -178,13 +178,14 @@ sudo shutdown -r now
 | `config.plist.bak-20261124-wi1001`    | WI-1.001 시험 전                  | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1007`    | WI-1.007 Poll 시험 전             | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1006`    | WI-1.006 복구 시험 전             | Enabled=true, boot-args `keepsyms=1 vvideo_irq=2` |
+| `config.plist.bak-20261124-wi2004`    | WI-2.004 패턴 시험 전             | Enabled=true, boot-args `keepsyms=1` |
 
 ## 7. 현재 상태 (2026-11-23)
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.18, UUID `31654AC5-A594-3B14-8F2B-CCA02D0185BF` (dSYM은 `build/dsym-archive/`). 시작 때 선호 모드 프레임버퍼(물리 연속)를 할당해 둔다. `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
+- EFI의 kext 버전: 0.0.19, UUID `6EFE566A-5FC6-33D4-BFAD-90E257DA183B` (dSYM은 `build/dsym-archive/`). 시작 때 선호 모드 프레임버퍼(물리 연속)를 할당해 둔다. 2D resource 명령을 갖췄고, boot-arg `vvideo_test_pattern=1`이면 시작 90초 뒤 색 띠를 15초 보여 준 뒤 스스로 되돌린다. `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
 - boot-args `keepsyms=1` (기본값으로 되돌림, 2026-11-24)
-- 디버그 boot-arg: `vvideo_log=0|1|2`(로그 수준), `vvideo_irq=0|1|2`(MSI-X/INTx/Poll), `vvideo_test_reset=1`(30초 뒤 외부 reset 흉내), `-vvideooff`(드라이버 끄기)
+- 디버그 boot-arg: `vvideo_log=0|1|2`(로그 수준), `vvideo_irq=0|1|2`(MSI-X/INTx/Poll), `vvideo_test_reset=1`(30초 뒤 외부 reset 흉내), `vvideo_test_pattern=1`(90초 뒤 색 띠 시험), `-vvideooff`(드라이버 끄기)
 - boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

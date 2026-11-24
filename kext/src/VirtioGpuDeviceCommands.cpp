@@ -11,6 +11,7 @@
 #include "VirtioPciTransport.hpp"
 #include "VirtioQueue.hpp"
 #include "vv/GpuCommand.hpp"
+#include "vv/MemEntries.hpp"
 
 namespace {
 namespace v = vv::virtio;
@@ -220,5 +221,94 @@ void VirtioGpuDevice::runSelfTest()
     publishCounters();
     vv::publishLog(this);
 #endif
+}
+
+uint32_t VirtioGpuDevice::allocateResourceId()
+{
+    return mNextResourceId++;
+}
+
+namespace {
+
+template <typename Request>
+Request makeRequest(v::gpu::CtrlType type)
+{
+    Request request{};
+    request.hdr.type = static_cast<uint32_t>(type);
+    return request;
+}
+
+v::gpu::Rect fullRect(const vv::display::Mode &mode)
+{
+    return v::gpu::Rect{0, 0, mode.width, mode.height};
+}
+
+} // namespace
+
+IOReturn VirtioGpuDevice::createResource2d(uint32_t resourceId, v::gpu::Format format, const vv::display::Mode &mode)
+{
+    auto request = makeRequest<v::gpu::ResourceCreate2d>(v::gpu::CtrlType::CmdResourceCreate2d);
+    request.resourceId = resourceId;
+    request.format = static_cast<uint32_t>(format);
+    request.width = mode.width;
+    request.height = mode.height;
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::attachBacking(uint32_t resourceId, uint64_t address, uint32_t length)
+{
+    // 프레임버퍼는 물리 연속이라 항목 하나다 (T-01). 여러 조각이 필요해지면 vv/MemEntries.hpp로 목록을 만든다.
+    struct {
+        v::gpu::ResourceAttachBacking header;
+        v::gpu::MemEntry entries[1];
+    } request{};
+    request.header.hdr.type = static_cast<uint32_t>(v::gpu::CtrlType::CmdResourceAttachBacking);
+    request.header.resourceId = resourceId;
+    request.header.nrEntries = 1;
+    const v::gpu::DmaSegment segment{address, length};
+    if (v::gpu::buildMemEntries(&segment, 1, request.entries, 1) != 1) {
+        return kIOReturnBadArgument;
+    }
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::setScanout(uint32_t scanoutId, uint32_t resourceId, const vv::display::Mode &mode)
+{
+    auto request = makeRequest<v::gpu::SetScanout>(v::gpu::CtrlType::CmdSetScanout);
+    request.scanoutId = scanoutId;
+    request.resourceId = resourceId;  // 0이면 scanout을 끈다
+    request.r = resourceId == 0 ? v::gpu::Rect{} : fullRect(mode);
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::transferToHost(uint32_t resourceId, const vv::display::Mode &mode)
+{
+    auto request = makeRequest<v::gpu::TransferToHost2d>(v::gpu::CtrlType::CmdTransferToHost2d);
+    request.r = fullRect(mode);
+    request.offset = 0;  // backing 시작부터 (전체 화면)
+    request.resourceId = resourceId;
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::flushResource(uint32_t resourceId, const vv::display::Mode &mode)
+{
+    auto request = makeRequest<v::gpu::ResourceFlush>(v::gpu::CtrlType::CmdResourceFlush);
+    request.r = fullRect(mode);
+    request.resourceId = resourceId;
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::detachBacking(uint32_t resourceId)
+{
+    auto request = makeRequest<v::gpu::ResourceDetachBacking>(v::gpu::CtrlType::CmdResourceDetachBacking);
+    request.resourceId = resourceId;
+    return sendNodataCommand(&request, sizeof(request), resourceId);
+}
+
+IOReturn VirtioGpuDevice::unrefResource(uint32_t resourceId)
+{
+    auto request = makeRequest<v::gpu::ResourceUnref>(v::gpu::CtrlType::CmdResourceUnref);
+    request.resourceId = resourceId;
+    return sendNodataCommand(&request, sizeof(request), resourceId);
 }
 

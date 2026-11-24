@@ -40,6 +40,9 @@ constexpr int kMaxInterruptSourceIndex = 16;
 // 복구 경로 시험용 boot-arg와 지연 (WI-1.006). 부팅이 끝나고 상태 감시가 돌기 시작한 뒤에 흉내 낸다.
 constexpr const char *kTestResetBootArg = "vvideo_test_reset";
 constexpr uint32_t kTestResetDelayMs = 30000;
+// 시험 패턴 boot-arg와 시작 지연. 로그인하고 QEMU 창을 볼 시간을 준다.
+constexpr const char *kTestPatternBootArg = "vvideo_test_pattern";
+constexpr uint32_t kPatternStartDelayMs = 90000;
 // stop에서 실행 중인 확인 명령이 끝나기를 기다리는 한도. 명령 기한(kCommandTimeoutMs)보다 넉넉히 잡는다.
 constexpr uint32_t kDisplayQueryDrainMs = 3000;
 constexpr uint32_t kDrainPollMs = 1;
@@ -57,10 +60,15 @@ uint32_t low32(uint64_t value)
     return static_cast<uint32_t>(value);
 }
 
-bool testResetRequested()
+bool bootArgEnabled(const char *name)
 {
     int value = 0;
-    return PE_parse_boot_argn(kTestResetBootArg, &value, sizeof(value)) && value != 0;
+    return PE_parse_boot_argn(name, &value, sizeof(value)) && value != 0;
+}
+
+bool testResetRequested()
+{
+    return bootArgEnabled(kTestResetBootArg);
 }
 
 v::IrqMode irqModeFromBootArgs()
@@ -121,7 +129,8 @@ bool VirtioGpuDevice::start(IOService *provider)
         return true;
     }
     mDisplayQueryCall = thread_call_allocate(&VirtioGpuDevice::deferredDisplayQuery, this);
-    if (mDisplayQueryCall == nullptr) {
+    mPatternCall = thread_call_allocate(&VirtioGpuDevice::deferredPatternTest, this);
+    if (mDisplayQueryCall == nullptr || mPatternCall == nullptr) {
         failDevice("thread-call");
         return true;
     }
@@ -682,6 +691,14 @@ void VirtioGpuDevice::startTimers()
             VV_LOG_INFO("gpu: test reset scheduled in %u ms", kTestResetDelayMs);
         }
     }
+    if (bootArgEnabled(kTestPatternBootArg)) {
+        mPatternTimer = IOTimerEventSource::timerEventSource(this, &VirtioGpuDevice::patternTimerFired);
+        if (mPatternTimer != nullptr && mWorkLoop->addEventSource(mPatternTimer) == kIOReturnSuccess) {
+            mPatternTimer->setTimeoutMS(kPatternStartDelayMs);
+            setProperty("VVPatternTest", "scheduled");
+            VV_LOG_INFO("gpu: pattern test scheduled in %u ms", kPatternStartDelayMs);
+        }
+    }
     if (mIrqMode != v::IrqMode::Poll) {
         return;
     }
@@ -695,7 +712,7 @@ void VirtioGpuDevice::startTimers()
 
 void VirtioGpuDevice::stopTimers()
 {
-    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer, &mTestResetTimer};
+    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer, &mTestResetTimer, &mPatternTimer};
     for (IOTimerEventSource **timer : timers) {
         if (*timer == nullptr) {
             continue;
@@ -780,18 +797,26 @@ void VirtioGpuDevice::publishCounters()
 void VirtioGpuDevice::stop(IOService *provider)
 {
     mStopping = true;
-    if (mDisplayQueryCall != nullptr) {
-        // 대기 중인 확인 명령은 취소하고, 이미 실행 중이면 끝날 때까지 기다린다.
-        // (thread_call_cancel_wait는 com.apple.kpi.private라 서드파티 kext가 쓸 수 없다.)
-        thread_call_cancel(mDisplayQueryCall);
-        for (uint32_t waited = 0; mDisplayQueryActive != 0 && waited < kDisplayQueryDrainMs; waited += kDrainPollMs) {
-            IOSleep(kDrainPollMs);
+    // 대기 중인 thread_call은 취소하고, 이미 실행 중이면 끝날 때까지 기다린다 (mStopping을 보고 빨리 끝난다).
+    // (thread_call_cancel_wait는 com.apple.kpi.private라 서드파티 kext가 쓸 수 없다.)
+    thread_call_t *calls[] = {&mDisplayQueryCall, &mPatternCall};
+    for (thread_call_t *call : calls) {
+        if (*call != nullptr) {
+            thread_call_cancel(*call);
         }
-        if (mDisplayQueryActive != 0 || !thread_call_free(mDisplayQueryCall)) {
+    }
+    for (uint32_t waited = 0; mDisplayQueryActive != 0 && waited < kDisplayQueryDrainMs; waited += kDrainPollMs) {
+        IOSleep(kDrainPollMs);
+    }
+    for (thread_call_t *call : calls) {
+        if (*call == nullptr) {
+            continue;
+        }
+        if (mDisplayQueryActive != 0 || !thread_call_free(*call)) {
             // 해제하지 못하면 메모리를 남기는 쪽을 택한다 (실행 중인 호출이 해제된 객체를 쓰는 것보다 안전).
-            VV_LOG_ERR("gpu: display query call still active at stop, leaking it");
+            VV_LOG_ERR("gpu: thread call still active at stop, leaking it");
         }
-        mDisplayQueryCall = nullptr;
+        *call = nullptr;
     }
     // 장치를 다른 드라이버(또는 다음 부팅)가 처음부터 쓸 수 있게 reset해 둔다.
     releaseDevice();

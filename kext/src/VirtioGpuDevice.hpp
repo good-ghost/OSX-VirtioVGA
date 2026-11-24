@@ -93,6 +93,22 @@ private:
                                vv::virtio::gpu::CommandResult *resultOut = nullptr);
     void queryDisplayInfo();
     void runSelfTest();
+
+    // 2D resource 명령 (WI-2.004). 모두 워크루프 밖에서 부른다.
+    IOReturn createResource2d(uint32_t resourceId, vv::virtio::gpu::Format format, const vv::display::Mode &mode);
+    IOReturn attachBacking(uint32_t resourceId, uint64_t address, uint32_t length);
+    IOReturn setScanout(uint32_t scanoutId, uint32_t resourceId, const vv::display::Mode &mode);
+    IOReturn transferToHost(uint32_t resourceId, const vv::display::Mode &mode);
+    IOReturn flushResource(uint32_t resourceId, const vv::display::Mode &mode);
+    IOReturn detachBacking(uint32_t resourceId);
+    IOReturn unrefResource(uint32_t resourceId);
+    uint32_t allocateResourceId();
+    // 시험 패턴 (boot-arg `vvideo_test_pattern=1`). 화면을 잠시 virtio-gpu로 바꿨다가 되돌린다.
+    void runPatternTest();
+    static void deferredPatternTest(thread_call_param_t owner, thread_call_param_t);
+    static void patternTimerFired(OSObject *owner, IOTimerEventSource *sender);
+    static IOReturn gatedReinitialize(OSObject *owner, void *, void *, void *, void *);
+    void patternStage(const char *stage);
     bool allocateFramebuffer(const vv::display::Mode &mode);
     void probeContiguousAllocation();
 
@@ -138,7 +154,11 @@ private:
     IOTimerEventSource *mPollTimer = nullptr;
     IOTimerEventSource *mTestResetTimer = nullptr;
     thread_call_t mDisplayQueryCall = nullptr;
-    volatile SInt32 mDisplayQueryActive = 0;  // 실행 중인 deferredDisplayQuery 수. stop에서 0이 될 때까지 기다린다
+    thread_call_t mPatternCall = nullptr;
+    IOTimerEventSource *mPatternTimer = nullptr;
+    // 실행 중인 thread_call(확인 명령·시험 패턴) 수. stop에서 0이 될 때까지 기다린다
+    volatile SInt32 mDisplayQueryActive = 0;
+    uint32_t mNextResourceId = 1;  // 0은 "resource 없음"(scanout 끄기)이라 쓰지 않는다
     bool mStopping = false;
     uint32_t mRecoveries = 0;
     bool mGivenUp = false;

@@ -178,6 +178,33 @@ personality 초안:
 
 남은 위험: 부팅 직후가 아닌 실행 중 모드 전환(WI-3.002)에서는 메모리 단편화로 16 MiB 연속 할당이 실패할 수 있다. 그때는 시작 때 최대 모드 버퍼를 미리 잡아 두는 방식으로 바꾼다.
 
-(이후: probe score, 픽셀 형식)
+### WI-2.004 2D resource 생명주기와 픽셀 형식 (2026-11-24) — 첫 화면 출력
+
+구현 (kext 0.0.19)
+
+- resource 명령: `createResource2d`, `attachBacking`(물리 연속이라 항목 1개), `setScanout`(resource 0이면 끄기), `transferToHost`(전체, offset 0), `flushResource`, `detachBacking`, `unrefResource`. 모두 `sendNodataCommand`. resource id는 1부터 증가.
+- `vv/TestPattern.hpp`: 세로 4등분 빨강·초록·파랑·흰색, 메모리 바이트 B,G,R,X. 테스트 3개.
+- 시험 패턴 `VirtioGpuDevicePatternTest.cpp` (boot-arg `vvideo_test_pattern=1`): 시작 90초 뒤 패턴 표시 15초 → scanout 끄기 10초 → resource 정리 → 장치 reset·재초기화. 모든 명령은 thread_call에서 보내고, 재초기화는 게이트 안에서 한다.
+
+실기 확인
+
+| 단계 | 기록 | 사용자가 QEMU 창에서 본 것 |
+| ---- | ---- | -------------------------- |
+| 표시 (create·attach·transfer·set_scanout·flush) | `shown` | 왼쪽부터 **빨강·초록·파랑·흰색** — 색 순서 정상 (AC-04) |
+| scanout 끄기 (resource 0) | `scanout-disabled` | **"Display output is not active"** |
+| detach·unref | `released` | (같음) |
+| 장치 reset·재초기화 | `reinitialized` | **macOS 화면(VGA)으로 정상 복귀** |
+
+- 카운터: `commands=10 completions=10 timeouts=0 errors=1`(자체 시험), 상태 `0x0F`, 새 패닉 없음.
+- **픽셀 형식 결정: `VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM`(2)** — macOS 32bpp 메모리 순서와 일치.
+- 확인하지 못한 것: 호스트 캡처(사용자 육안 확인으로 대신함).
+
+이후 설계에 쓰는 사실
+
+- QEMU virtio-vga는 `SET_SCANOUT`으로 resource를 연결하는 순간 VGA 출력에서 virtio-gpu 출력으로 바뀐다. `GET_DISPLAY_INFO`·resource 생성만으로는 바뀌지 않는다 (WI-1.007, 이번 시험).
+- scanout을 끄면(resource 0) VGA로 돌아가지 않고 "Display output is not active"가 된다.
+- **장치를 reset하면 VGA 출력으로 돌아간다.** 그래서 WI-2.006 이후 드라이버가 화면을 넘겨받은 뒤 실패하면 장치를 reset해 펌웨어 화면(IONDRV/BAR0)으로 되돌리는 것을 안전장치로 쓴다 (REQ-005, AC-06).
+
+(이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

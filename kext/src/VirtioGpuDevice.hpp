@@ -2,7 +2,11 @@
 // docs/research/apple-virtio-transport.md). 전송 계층을 소유하고 장치 초기화를 진행한다.
 //
 // 초기화 순서 (§3.1.1): reset → ACKNOWLEDGE → DRIVER → feature 협상 → FEATURES_OK 확인(WI-1.003)
-// → 인터럽트 준비(WI-1.005) → controlq·cursorq 등록(WI-1.004) → DRIVER_OK. 아직 명령은 보내지 않는다 (WI-1.007).
+// → 인터럽트 준비(WI-1.005) → controlq·cursorq 등록(WI-1.004) → DRIVER_OK → GET_DISPLAY_INFO 1회(WI-1.007).
+//
+// 명령 (WI-1.007, REQ-023, REQ-024): controlq에 한 번에 하나만 보낸다. IOCommandGate 안에서 요청을 링에 올리고
+// notify한 뒤 commandSleep으로 완료를 기다린다(타임아웃 상수). 완료는 인터럽트·Poll 처리기가 같은 워크루프에서
+// used 링을 회수하며 commandWakeup으로 알린다. 응답은 길이·type을 검사한 뒤에만 쓴다.
 //
 // 인터럽트 (WI-1.005, boot-arg `vvideo_irq=0|1|2`):
 //   IOPCIDevice가 이미 붙여 둔 인터럽트 소스를 그대로 쓴다. configureInterrupts는 이 장치에서
@@ -23,6 +27,7 @@
 
 #include "vv/VirtioIrq.hpp"
 
+class IOCommandGate;
 class IOFilterInterruptEventSource;
 class IOInterruptEventSource;
 class IOPCIDevice;
@@ -30,6 +35,7 @@ class IOTimerEventSource;
 class IOWorkLoop;
 class VirtioPciTransport;
 class VirtioQueue;
+class VVDmaBuffer;
 
 class VirtioGpuDevice : public IOService {
     OSDeclareDefaultStructors(VirtioGpuDevice)
@@ -60,6 +66,12 @@ private:
     void checkStatus();
     void publishCounters();
 
+    // 명령 하나를 보내고 완료를 기다린다. 응답을 response에 복사하고 장치가 쓴 길이를 written에 남긴다.
+    IOReturn submitCommand(const void *request, uint32_t requestBytes, void *response, uint32_t responseBytes,
+                           uint32_t *written);
+    static IOReturn gatedSubmit(OSObject *owner, void *request, void *response, void *lengths, void *written);
+    void queryDisplayInfo();
+
     void handleQueueEvent(unsigned queue);
     void handleConfigEvent();
     void handleSharedEvent();
@@ -83,6 +95,15 @@ private:
     IOInterruptEventSource *mMsixSources[vv::virtio::kSeparateMsixVectors] = {};
     IOFilterInterruptEventSource *mIntxSource = nullptr;
     volatile uint32_t mIntxPendingIsr = 0;  // 필터(1차 인터럽트 문맥)가 쌓고 워크루프가 비운다
+
+    IOCommandGate *mGate = nullptr;
+    VVDmaBuffer *mCommandBuffer = nullptr;  // 요청·응답을 담는 장치 공유 메모리
+    bool mCommandInFlight = false;
+    bool mCommandDone = false;
+    uint16_t mCommandHead = 0;
+    uint32_t mCommandWritten = 0;
+    uint32_t mCommandsSent = 0;
+    uint32_t mCommandTimeouts = 0;
 
     IOTimerEventSource *mStatusTimer = nullptr;
     IOTimerEventSource *mPollTimer = nullptr;

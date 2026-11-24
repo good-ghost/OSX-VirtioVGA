@@ -233,3 +233,25 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 - QEMU GTK 창 크기 변경으로는 디스플레이 이벤트가 생기지 않았다. virtio-gpu scanout이 아직 없는(VGA 출력 중인) 상태라서일 가능성이 있다 (확인 못 함). config 인터럽트는 scanout이 생기는 P2 이후(WI-3.005)에 다시 본다.
 - controlq 인터럽트와 Poll 방식은 WI-1.007의 첫 `GET_DISPLAY_INFO` 왕복으로 확인한다. 그때 WI-1.005 체크리스트를 닫는다.
 
+### WI-1.007 (2026-11-24) — WI-1.005 수신 확인 포함
+
+구현 (kext 0.0.15)
+
+- `vv/GpuCommand.hpp`: 응답 검증(헤더보다 짧음 → 오류 type → 기대 크기보다 짧음 → type 불일치 순서. 오류 응답은 헤더만 오므로 type을 길이보다 먼저 본다), scanout 수를 16으로 자르기. 테스트 5개.
+- `VirtioPciTransport::notifyQueue`: 배리어 후 notify 주소에 큐 번호를 쓴다.
+- `VirtioGpuDevice::submitCommand`: `IOCommandGate` 안에서 요청(오프셋 0)·응답(오프셋 1024)을 한 page DMA 버퍼에 두고 2조각 체인으로 controlq에 올려 notify, `commandSleep`(기한 1초)으로 대기. 인터럽트·Poll 처리기가 used 링에서 같은 head를 회수하면 `commandWakeup`. 시간 초과면 명령이 장치에 남은 것으로 보고 이후 명령을 막는다(reset은 WI-1.006).
+- DRIVER_OK 직후 `GET_DISPLAY_INFO` 1회.
+
+실기 확인
+
+| 방식 | boot-args | 결과 |
+| ---- | --------- | ---- |
+| MSI-X (공유 벡터 0) | `keepsyms=1` | `VVDisplayInfo = 0:1280x800`, scanout 0 `enabled=1 1280x800+0+0 flags=0x0`. `interrupts=1 controlq=1 completions=1 commands=1 timeouts=0` |
+| Poll (10ms) | `keepsyms=1 vvideo_irq=2` | `VVDisplayInfo = 0:1280x800`. `interrupts=0 controlq=1 completions=1 commands=1 timeouts=0` |
+
+- 두 경우 모두 status `0x0F`, 상태 불일치 0, 새 패닉 없음.
+- **명령을 처리한 뒤에도 QEMU 화면은 VGA 출력(IONDRV 1280×800)을 유지했다.** 우려했던 검은 화면은 생기지 않았다. QEMU가 virtio-gpu 출력으로 바꾸는 시점은 `SET_SCANOUT` 등 이후 명령에서 확인한다 (P2).
+- 수집본: `env-*-wi1007-msix-roundtrip.txt`, `env-*-wi1007-poll-roundtrip.txt`.
+- PHASE-PLAN의 "10회 재부팅" 반복은 하지 않았다. 이번 Phase 동안 재부팅 약 15회에서 초기화 실패 1회(0.0.12, `configureInterrupts` 미지원 — 원인 수정됨) 외에는 같은 결과였다.
+- 남은 설정: OpenCore boot-args가 시험용 `keepsyms=1 vvideo_irq=2`(Poll)이다. 다음 EFI 작업 때 `keepsyms=1`로 되돌린다.
+

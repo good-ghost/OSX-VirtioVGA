@@ -141,6 +141,32 @@ Recovery에서도 kext가 주입되므로 Recovery마저 부팅되지 않으면 
 
 VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같은 디스크(`disk0s1`)에 있으므로 함께 되돌아간다.
 
+### 5.3 부팅은 되는데 화면만 검을 때 (호스트에서 SSH로 복구)
+
+드라이버가 virtio-gpu에 명령을 보내기 시작하면 QEMU가 화면 출력을 VGA에서 virtio-gpu로 바꿀 수 있다. 우리가 scanout을 설정하기 전(P2 이전)에는 그때 화면이 검게 보인다. macOS는 계속 돌고 있으므로 원격 로그인(SSH)으로 복구한다. 게스트의 원격 로그인이 켜져 있어야 한다 (2026-11-24 켜져 있음, 게스트 IP `192.168.122.75`).
+
+호스트에서:
+
+```bash
+ssh woomg@192.168.122.75
+```
+
+게스트 셸에서 (비밀번호는 사용자가 입력):
+
+```bash
+sudo diskutil mount disk0s1
+```
+
+```bash
+/usr/libexec/PlistBuddy -c "Set :Kernel:Add:8:Enabled false" /Volumes/EFI/EFI/OC/config.plist && plutil -lint /Volumes/EFI/EFI/OC/config.plist
+```
+
+```bash
+sudo shutdown -r now
+```
+
+화면이 검어도 Claude 데스크톱 세션은 게스트 안에서 계속 돈다. 다른 기기에서 Remote Control로 이어서 진단할 수 있다.
+
 ## 6. 백업 파일 목록
 
 | 파일 (EFI/OC/)                        | 만든 시점                         | 내용                                       |
@@ -149,11 +175,14 @@ VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같
 | `config.plist.bak-20261123-wi0005`    | WI-0.005 boot-args 변경 전        | VirtioVideo 항목 있음, boot-args `keepsyms=1` |
 | `config.plist.bak-20261123-wi0003`    | WI-0.003 시험 전                  | VirtioVideo 항목 있음(Enabled=true), boot-args `keepsyms=1 vvideo_log=0` |
 | `config.plist.bak-20261123-wi0004`    | WI-0.004 kext 재활성화 전         | VirtioVideo 항목 있음(Enabled=false), boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-wi1001`    | WI-1.001 시험 전                  | Enabled=true, boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-wi1007`    | WI-1.007 Poll 시험 전             | Enabled=true, boot-args `keepsyms=1` |
 
 ## 7. 현재 상태 (2026-11-23)
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.14, UUID `2D60698A-5AA8-3E2D-B9E4-7426F47B754E` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 MSI-X(공유 벡터 0) 인터럽트 소스를 켠다. 명령은 아직 보내지 않으며 화면은 IONDRV가 그린다
+- EFI의 kext 버전: 0.0.15, UUID `2956D948-796A-39DE-88CB-7B817DA022A0` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 1회 주고받는다. 화면은 IONDRV가 그린다
+- **boot-args가 시험용 `keepsyms=1 vvideo_irq=2`(Poll)이다.** 다음 EFI 작업 때 `keepsyms=1`로 되돌린다 (백업 `config.plist.bak-20261124-wi1007`)
 - boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

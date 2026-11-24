@@ -1,5 +1,6 @@
 #include "VirtioGpuDevice.hpp"
 
+#include <IOKit/IOCommandGate.h>
 #include <IOKit/IOFilterInterruptEventSource.h>
 #include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOTimerEventSource.h>
@@ -9,9 +10,11 @@
 #include <pexpert/pexpert.h>
 
 #include "VVBootArgs.hpp"
+#include "VVDmaBuffer.hpp"
 #include "VVLog.hpp"
 #include "VirtioPciTransport.hpp"
 #include "VirtioQueue.hpp"
+#include "vv/GpuCommand.hpp"
 #include "vv/PciCapWalk.hpp"
 #include "vv/VirtioFeatures.hpp"
 #include "vv/VirtioGpuSpec.hpp"
@@ -32,6 +35,13 @@ constexpr const char *kQueueProperty[] = {"VVControlQueue", "VVCursorQueue"};
 // 인터럽트 소스 목록을 훑을 최대 인덱스 (레거시 1 + MSI-X 테이블 크기보다 넉넉히).
 constexpr int kMaxInterruptSourceIndex = 16;
 constexpr size_t kSummaryBytes = 128;
+// 명령 응답 대기 한도 (REQ-024). QEMU는 수 ms 안에 응답하므로 넉넉히 잡는다.
+constexpr uint32_t kCommandTimeoutMs = 1000;
+// 명령 버퍼: 앞쪽에 요청, kResponseOffset부터 응답. 가장 큰 응답(RespEdid, 1056바이트)도 들어간다.
+constexpr uint32_t kCommandBufferBytes = PAGE_SIZE;
+constexpr uint32_t kResponseOffset = 1024;
+constexpr uint32_t kMaxRequestBytes = kResponseOffset;
+static_assert(sizeof(v::gpu::RespEdid) <= kCommandBufferBytes - kResponseOffset, "응답 영역이 가장 큰 응답보다 작다");
 
 static_assert(v::gpu::kControlQueue == 0 && v::gpu::kCursorQueue == 1, "mQueues 배열 순서");
 
@@ -96,9 +106,16 @@ bool VirtioGpuDevice::start(IOService *provider)
         return true;
     }
     mIrqMode = irqModeFromBootArgs();
+    mGate = IOCommandGate::commandGate(this);
+    mCommandBuffer = VVDmaBuffer::withLength(kCommandBufferBytes);
+    if (mGate == nullptr || mWorkLoop->addEventSource(mGate) != kIOReturnSuccess || mCommandBuffer == nullptr) {
+        failDevice("command-setup");
+        return true;
+    }
     if (initializeDevice()) {
         enableInterrupts();
         startTimers();
+        queryDisplayInfo();
     }
     publishCounters();
     vv::publishLog(this);
@@ -346,6 +363,11 @@ void VirtioGpuDevice::handleQueueEvent(unsigned queue)
             break;
         }
         ++mCompletions[queue];
+        if (queue == v::gpu::kControlQueue && mCommandInFlight && completion.head == mCommandHead) {
+            mCommandWritten = completion.written;
+            mCommandDone = true;
+            mGate->commandWakeup(&mCommandDone);
+        }
     }
 }
 
@@ -437,6 +459,110 @@ void VirtioGpuDevice::pollTimerFired(OSObject *owner, IOTimerEventSource *sender
     sender->setTimeoutMS(kPollIntervalMs);
 }
 
+IOReturn VirtioGpuDevice::submitCommand(const void *request, uint32_t requestBytes, void *response,
+                                       uint32_t responseBytes, uint32_t *written)
+{
+    if (mGate == nullptr || request == nullptr || response == nullptr || requestBytes == 0 ||
+        requestBytes > kMaxRequestBytes || responseBytes > kCommandBufferBytes - kResponseOffset) {
+        return kIOReturnBadArgument;
+    }
+    uint32_t lengths[2] = {requestBytes, responseBytes};
+    return mGate->runAction(&VirtioGpuDevice::gatedSubmit, const_cast<void *>(request), response, lengths, written);
+}
+
+IOReturn VirtioGpuDevice::gatedSubmit(OSObject *owner, void *request, void *response, void *lengths, void *written)
+{
+    auto *self = OSDynamicCast(VirtioGpuDevice, owner);
+    if (self == nullptr || self->mTransport == nullptr || self->mQueues[v::gpu::kControlQueue] == nullptr) {
+        return kIOReturnNotReady;
+    }
+    if (self->mCommandInFlight) {
+        // 이전 명령이 시간 초과로 장치에 남아 있다. reset(WI-1.006) 전에는 새 명령을 보내지 않는다.
+        return kIOReturnBusy;
+    }
+    const uint32_t requestBytes = static_cast<uint32_t *>(lengths)[0];
+    const uint32_t responseBytes = static_cast<uint32_t *>(lengths)[1];
+    auto *buffer = static_cast<uint8_t *>(self->mCommandBuffer->cpuAddress());
+    bcopy(request, buffer, requestBytes);
+    bzero(buffer + kResponseOffset, responseBytes);
+
+    const uint64_t base = self->mCommandBuffer->deviceAddress();
+    const v::RingSegment segments[] = {
+        {base, requestBytes, false},
+        {base + kResponseOffset, responseBytes, true},
+    };
+    VirtioQueue *queue = self->mQueues[v::gpu::kControlQueue];
+    uint16_t head = 0;
+    if (!queue->ring().add(segments, 2, head)) {
+        return kIOReturnNoResources;
+    }
+    self->mCommandHead = head;
+    self->mCommandDone = false;
+    self->mCommandInFlight = true;
+    ++self->mCommandsSent;
+    self->mTransport->notifyQueue(queue);
+
+    AbsoluteTime deadline = 0;
+    clock_interval_to_deadline(kCommandTimeoutMs, kMillisecondScale, &deadline);
+    while (!self->mCommandDone) {
+        // commandSleep은 깨워지면 kIOReturnSuccess, 기한이 지나면 kIOReturnTimeout을 돌려준다.
+        if (self->mGate->commandSleep(&self->mCommandDone, deadline, THREAD_UNINT) == kIOReturnTimeout) {
+            break;
+        }
+    }
+    if (!self->mCommandDone) {
+        ++self->mCommandTimeouts;
+        VV_LOG_ERR("gpu: command timed out after %u ms (head %u)", kCommandTimeoutMs, head);
+        return kIOReturnTimeout;
+    }
+    self->mCommandInFlight = false;
+    bcopy(buffer + kResponseOffset, response, responseBytes);
+    *static_cast<uint32_t *>(written) = self->mCommandWritten;
+    return kIOReturnSuccess;
+}
+
+void VirtioGpuDevice::queryDisplayInfo()
+{
+    using Gpu = v::gpu::Config;
+    v::gpu::CtrlHdr request{};
+    request.type = static_cast<uint32_t>(v::gpu::CtrlType::CmdGetDisplayInfo);
+    v::gpu::RespDisplayInfo response{};
+    uint32_t written = 0;
+    const IOReturn result = submitCommand(&request, sizeof(request), &response, sizeof(response), &written);
+    publishCounters();
+    if (result != kIOReturnSuccess) {
+        VV_LOG_ERR("gpu: GET_DISPLAY_INFO failed: 0x%x", result);
+        setProperty("VVDisplayInfo", "submit-failed");
+        vv::publishLog(this);
+        return;
+    }
+    const auto check = v::gpu::checkResponse(written, sizeof(response), response.hdr.type,
+                                             v::gpu::CtrlType::RespOkDisplayInfo);
+    if (check != v::gpu::ResponseError::None) {
+        VV_LOG_ERR("gpu: GET_DISPLAY_INFO response %s (type 0x%x, written %u)", v::gpu::responseErrorName(check),
+                   response.hdr.type, written);
+        setProperty("VVDisplayInfo", v::gpu::responseErrorName(check));
+        vv::publishLog(this);
+        return;
+    }
+    const uint32_t scanouts = v::gpu::usableScanouts(mTransport->deviceRead32(offsetof(Gpu, numScanouts)));
+    char summary[kSummaryBytes] = {};
+    size_t used = 0;
+    for (uint32_t i = 0; i < scanouts && used < sizeof(summary); ++i) {
+        const auto &mode = response.pmodes[i];
+        VV_LOG_INFO("gpu: scanout %u enabled=%u %ux%u+%u+%u flags=0x%x", i, mode.enabled, mode.r.width,
+                    mode.r.height, mode.r.x, mode.r.y, mode.flags);
+        const int n = snprintf(summary + used, sizeof(summary) - used, "%s%u:%ux%u%s", used == 0 ? "" : " ", i,
+                               mode.r.width, mode.r.height, mode.enabled != 0 ? "" : "(off)");
+        if (n <= 0) {
+            break;
+        }
+        used += static_cast<size_t>(n);
+    }
+    setProperty("VVDisplayInfo", summary);
+    vv::publishLog(this);
+}
+
 void VirtioGpuDevice::failDevice(const char *reason)
 {
     VV_LOG_ERR("gpu: init failed: %s", reason);
@@ -468,6 +594,18 @@ void VirtioGpuDevice::releaseDevice()
     if (mTransport != nullptr) {
         mTransport->release();
         mTransport = nullptr;
+    }
+    if (mGate != nullptr) {
+        if (mWorkLoop != nullptr) {
+            mWorkLoop->removeEventSource(mGate);
+        }
+        mGate->release();
+        mGate = nullptr;
+    }
+    // 장치를 reset한 뒤라 명령 버퍼를 더는 쓰지 않는다.
+    if (mCommandBuffer != nullptr) {
+        mCommandBuffer->release();
+        mCommandBuffer = nullptr;
     }
 }
 
@@ -564,8 +702,10 @@ void VirtioGpuDevice::publishCounters()
 {
     char summary[kSummaryBytes];
     snprintf(summary, sizeof(summary),
-             "interrupts=%u config=%u controlq=%u cursorq=%u completions=%u/%u device-errors=%u", mInterrupts,
-             mConfigEvents, mQueueEvents[0], mQueueEvents[1], mCompletions[0], mCompletions[1], mDeviceErrors);
+             "interrupts=%u config=%u controlq=%u cursorq=%u completions=%u/%u device-errors=%u commands=%u "
+             "timeouts=%u",
+             mInterrupts, mConfigEvents, mQueueEvents[0], mQueueEvents[1], mCompletions[0], mCompletions[1],
+             mDeviceErrors, mCommandsSent, mCommandTimeouts);
     setProperty("VVEventCounters", summary);
 }
 

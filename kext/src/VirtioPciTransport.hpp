@@ -3,6 +3,7 @@
 // WI-1.003: reset, 상태 비트, feature 읽기·쓰기 (§3.1.1 초기화 순서의 앞부분).
 // WI-1.004: 큐 등록 (§4.1.5.1.3).
 // WI-1.005: MSI-X 벡터 배정(다시 읽어 장치가 받아들였는지 확인), ISR 읽기, device config 쓰기.
+// WI-1.007: 큐 알림(notify).
 // GPU 코드와 분리해 다른 virtio 장치에도 쓸 수 있게 둔다.
 #pragma once
 
@@ -58,6 +59,9 @@ public:
     bool setupQueue(VirtioQueue *queue, uint16_t vector);
     // 큐가 켜져 있는지 확인한다. 끄는 것은 reset으로만 한다 (드라이버가 queue_enable에 0을 쓰는 것은 사양상 금지).
     bool isQueueEnabled(uint16_t index);
+    // §4.1.4.4: 큐의 notify 주소에 큐 번호(16비트)를 써서 장치에 새 버퍼를 알린다.
+    // 링 갱신이 먼저 보이도록 쓰기 전에 메모리 배리어를 둔다 (§2.7.13).
+    bool notifyQueue(VirtioQueue *queue);
 
     void free() override;
 

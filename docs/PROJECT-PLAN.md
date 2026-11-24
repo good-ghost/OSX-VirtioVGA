@@ -90,9 +90,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
 | [X]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
 | [X]    | WI-1.004  | split virtqueue                                     | 2       |
-| [ ]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
+| [X]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
 | [ ]    | WI-1.006  | 장치 reset 처리와 전송 클래스 분리                  | 1       |
-| [ ]    | WI-1.007  | 전송 계층 통합 확인 (GET_DISPLAY_INFO 왕복)         | 1       |
+| [X]    | WI-1.007  | 전송 계층 통합 확인 (GET_DISPLAY_INFO 왕복)         | 1       |
 
 - WI-1.001
   - [X] Apple 전송 드라이버가 장치 상태 레지스터를 건드리는지(초기화·reset 여부) 조사한 결과를 `docs/research/`에 남겼다 (`apple-virtio-transport.md`: status=ACK만, 큐·MSI-X·feature 미설정)
@@ -112,15 +112,15 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 인덱스 wrap-around를 포함한 링 로직 단위 테스트가 통과한다 (`SplitRingTests`, 70000회 왕복)
   - [X] 큐 크기를 장치가 알려 준 값 이하로 정한다 (`chooseQueueSize`, 장치 최대 1024 → controlq 64, cursorq 16)
 - WI-1.005
-  - [ ] MSI-X 벡터 3개(config, controlq, cursorq)를 배정하고 인터럽트를 받는다 — macOS가 이 장치에 MSI-X 소스를 1개만 주어 벡터 0 공유로 구현·설정 확인(MSI-X 활성, 장치가 벡터 수락). 실제 인터럽트 수신은 WI-1.007 첫 명령에서 확인
-  - [ ] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다 — 구현했으나 이 장치에는 레거시 인터럽트 소스가 없어(IOPCIMessagedInterruptController만) Poll로 내려간다. 시험 불가
-  - [ ] 폴링 모드 디버그 옵션에서 인터럽트 없이 동작한다 — 구현. WI-1.007 명령 왕복으로 확인
+  - [X] MSI-X 벡터 3개(config, controlq, cursorq)를 배정하고 인터럽트를 받는다 — macOS가 이 장치에 MSI-X 소스를 1개만 주어 벡터 0 공유로 구현. WI-1.007 첫 명령의 완료를 MSI-X 인터럽트로 받음(interrupts=1, completions=1)
+  - [X] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다 — **이 장치에서는 시험 불가**: 레거시 인터럽트 소스가 없다(IOPCIMessagedInterruptController만). 코드는 있고, `vvideo_irq=1`이면 Poll로 내려간다
+  - [X] 폴링 모드 디버그 옵션에서 인터럽트 없이 동작한다 — `vvideo_irq=2`에서 GET_DISPLAY_INFO 왕복 성공(interrupts=0, completions=1)
 - WI-1.006
   - [ ] `DEVICE_NEEDS_RESET`을 감지하면 reset 후 재초기화 경로를 탄다 (폴링 모드에서 강제로 시험)
   - [ ] 전송 계층이 GPU 코드와 분리된 클래스로 있다
 - WI-1.007
-  - [ ] `GET_DISPLAY_INFO` 요청과 응답이 한 번 왕복하고 scanout 0의 1280×800이 로그에 남는다
-  - [ ] kext를 실은 채 부팅해도 화면은 여전히 `IONDRVFramebuffer`로 정상이다 (매칭은 아직 하지 않음)
+  - [X] `GET_DISPLAY_INFO` 요청과 응답이 한 번 왕복하고 scanout 0의 1280×800이 로그에 남는다 (MSI-X, Poll 두 방식)
+  - [X] kext를 실은 채 부팅해도 화면은 여전히 `IONDRVFramebuffer`로 정상이다 (매칭은 아직 하지 않음) — 명령을 받은 뒤에도 QEMU는 VGA 출력 유지
 
 ### P2. 2D 단일 모드 출력 — [PHASE-PLAN-02](phases/PHASE-PLAN-02.md)
 

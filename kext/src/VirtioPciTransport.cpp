@@ -339,3 +339,12 @@ bool VirtioPciTransport::setConfigVector(uint16_t vector)
            commonRead16(offsetof(CommonCfg, configMsixVector)) == vector;
 }
 
+bool VirtioPciTransport::notifyQueue(VirtioQueue *queue)
+{
+    if (queue == nullptr) {
+        return false;
+    }
+    vv::virtio::ringMemoryBarrier();
+    return writeAt<uint16_t>(regionAddress(mLayout.notify, queue->notifyOffset(), sizeof(uint16_t)), queue->index());
+}
+

@@ -179,12 +179,18 @@ sudo shutdown -r now
 | `config.plist.bak-20261124-wi1007`    | WI-1.007 Poll 시험 전             | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1006`    | WI-1.006 복구 시험 전             | Enabled=true, boot-args `keepsyms=1 vvideo_irq=2` |
 | `config.plist.bak-20261124-wi2004`    | WI-2.004 패턴 시험 전             | Enabled=true, boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-wi2004-redo` | 스냅샷 복구 후 WI-2.004 재설치 전 | VirtioVideo 항목이 없는 원래 설정 (복구로 위 백업들은 EFI에서 사라짐) |
 
-## 7. 현재 상태 (2026-11-23)
+위 표에서 `wi2004-redo`를 뺀 백업은 2026-11-24 호스트 스냅샷 "WI-001" 복구로 EFI에서 사라졌다 ([WI-2.004.md](WI-2.004.md)).
 
-- boot-args: `keepsyms=1`
-- `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.19, UUID `6EFE566A-5FC6-33D4-BFAD-90E257DA183B` (dSYM은 `build/dsym-archive/`). 시작 때 선호 모드 프레임버퍼(물리 연속)를 할당해 둔다. 2D resource 명령을 갖췄고, boot-arg `vvideo_test_pattern=1`이면 시작 90초 뒤 색 띠를 15초 보여 준 뒤 스스로 되돌린다. `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
+## 7. 현재 상태 (2026-11-24, 스냅샷 복구 후 WI-2.004 재설치)
+
+- boot-args: `keepsyms=1`, OpenCore `Misc > Debug > Target` 0 (파일 로그 꺼짐)
+- `Kernel > Add:8` VirtioVideo: `Enabled=true` (재설치 때 다시 추가)
+- KDK `KDK_15.8.3_24H241.kdk` 재설치함 (커널 UUID `747934E9-…` 일치)
+- EFI의 kext 버전: 0.0.19 (커밋 `0c69321` 코드를 다시 빌드), UUID `F4919C2E-B38E-3497-828D-BBD33E63CB5A` (dSYM은 `build/dsym-archive/`). 원래 WI-2.004 빌드 UUID `6EFE566A-…`의 dSYM은 복구로 사라졌다.
+- 재설치 후 확인 (2026-11-24): `VVInitResult=driver-ok`, 상태 15(0x0F), `VVDisplayInfo=0:1280x800`, `VVFramebuffer=1280x800 bytes=4096000 contiguous=1 dma-identity=1`, `VVContigProbe=2560x1600 ok-contiguous`, `VVSelfTest … pass`, MSI-X, 명령 2·시간 초과 0·복구 0, 새 패닉 없음. 화면 1280×800(IONDRV). 시험 패턴은 다시 돌리지 않았다.
+- 기능 요약: 시작 때 선호 모드 프레임버퍼(물리 연속)를 할당해 둔다. 2D resource 명령을 갖췄고, boot-arg `vvideo_test_pattern=1`이면 시작 90초 뒤 색 띠를 15초 보여 준 뒤 스스로 되돌린다. `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 `GET_DISPLAY_INFO`를 주고받으며, 장치가 reset되면 스스로 복구한다. 디버그 빌드는 시작 때 오류 응답 자체 시험(`VVSelfTest`)을 한다. 화면은 IONDRV가 그린다
 - boot-args `keepsyms=1` (기본값으로 되돌림, 2026-11-24)
 - 디버그 boot-arg: `vvideo_log=0|1|2`(로그 수준), `vvideo_irq=0|1|2`(MSI-X/INTx/Poll), `vvideo_test_reset=1`(30초 뒤 외부 reset 흉내), `vvideo_test_pattern=1`(90초 뒤 색 띠 시험), `-vvideooff`(드라이버 끄기)
 - boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)

@@ -95,6 +95,20 @@ sudo rm -rf /Library/Extensions/VirtioVideo.kext && sudo ditto --norsrc --noexta
 
 되돌리기: §4의 `-vvideooff`, 부팅이 안 되면 안전 모드(boot-arg `-x` 또는 부팅 시 Shift)로 들어가 `sudo rm -rf /Library/Extensions/VirtioVideo.kext` 후 `sudo kmutil rebuild`, 그래도 안 되면 Recovery에서 `kmutil trigger-panic-medic --volume-root /Volumes/<볼륨>`. SIP 원복은 `csr-active-config`=`00000000`.
 
+### 3B. IONDRV 차단 보조 kext (OpenCore 주입, 2026-11-24)
+
+본 kext가 보조 collection으로 늦게 로드되므로, 부팅 초기에 IONDRV가 붙지 못하게 하는 보조 kext를 OpenCore로 넣는다 (OpenCore DeviceProperties는 이 VM에서 장치에 적용되지 않았다, PHASE-PLAN-02).
+
+```bash
+rm -rf /Volumes/EFI/EFI/OC/Kexts/VirtioVideoNdrvBlocker.kext && ditto --norsrc --noextattr build/VirtioVideoNdrvBlocker.kext /Volumes/EFI/EFI/OC/Kexts/VirtioVideoNdrvBlocker.kext && dot_clean -m /Volumes/EFI/EFI/OC
+```
+
+`Kernel > Add` 항목 (처음 한 번): `Arch x86_64`, `BundlePath VirtioVideoNdrvBlocker.kext`, `ExecutablePath Contents/MacOS/VirtioVideoNdrvBlocker`, `PlistPath Contents/Info.plist`, `MinKernel 24.0.0`, `Enabled true`. PlistBuddy로 배열에 넣으면 위치가 어긋날 수 있어 `plutil -insert Kernel.Add -json '{…}' -append`를 쓴다.
+
+확인: `ioreg -r -c IOPCIDevice -l -w0 | grep VVNdrvBlocked` → `"set"`, `ioreg -r -c IOFramebuffer -w0 -d1`에 `VirtioVideoFramebuffer`만.
+
+끄기: boot-args에 `-vvideooff`를 넣으면 보조 kext가 속성을 붙이지 않아 IONDRV가 평소대로 화면을 맡는다 (본 kext도 매칭을 거절한다).
+
 ## 4. 드라이버를 끄는 방법
 
 가벼운 것부터 쓴다.
@@ -203,7 +217,13 @@ sudo shutdown -r now
 
 위 표에서 `wi2004-redo`를 뺀 백업은 2026-11-24 호스트 스냅샷 "WI-001" 복구로 EFI에서 사라졌다 ([WI-2.004.md](WI-2.004.md)).
 
-## 7. 현재 상태 (2026-11-24, 보조 kernel collection 전환 후)
+## 7. 현재 상태 (2026-11-24, 우리 프레임버퍼가 화면을 맡음)
+
+- 본 kext 0.0.23(UUID `0E699920-…`) 보조 collection, 보조 kext VirtioVideoNdrvBlocker 0.0.1(UUID `DF995B63-…`) OpenCore 주입
+- IONDRV 없음, `VirtioVideoFramebuffer` 1280×800, scanout 동작 중. boot-args `keepsyms=1`
+- 백업: `config.plist.bak-20261124-ndrvblocker`(보조 kext 추가 전), 그 앞의 `…-dptest`, `…-wi2005-ignorendrv`, `…-wi2005-untakeover`, `…-wi2005-takeover`
+
+### 이전 상태 (보조 kernel collection 전환 후)
 
 - 로드 경로: **`/Library/Extensions/VirtioVideo.kext` 0.0.21(UUID `95883E93-…`), 보조 kernel collection**. OC `Kernel > Add:8` VirtioVideo는 `Enabled=false`(EFI의 kext 파일은 남아 있음)
 - SIP: `csr-active-config` `01020000` (Kext Signing만 해제), `NVRAM > Delete`에 `csr-active-config`

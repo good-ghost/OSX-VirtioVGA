@@ -130,8 +130,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-2.002  | display info 조회                                   | 0.5     |
 | [X]    | WI-2.003  | 프레임버퍼 메모리 풀과 backing                      | 1.5     |
 | [X]    | WI-2.004  | 2D resource 생명주기와 픽셀 형식                    | 1.5     |
-| [ ]    | WI-2.005  | IOFramebuffer 하위 클래스 (고정 모드)               | 2.5     |
-| [ ]    | WI-2.006  | 부트 프레임버퍼 대체 (매칭·probe score)             | 1.5     |
+| [X]    | WI-2.005  | IOFramebuffer 하위 클래스 (고정 모드)               | 2.5     |
+| [X]    | WI-2.006  | 부트 프레임버퍼 대체 (매칭·probe score)             | 1.5     |
 | [ ]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
 | [ ]    | WI-2.008  | 실패 경로와 자원 해제                               | 1       |
 | [ ]    | WI-2.009  | 부트 화면 이어받기                                  | 1       |
@@ -151,14 +151,14 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] create → attach → set_scanout → transfer → flush → detach → unref가 오류 없이 돈다 (실기: 명령 10개 성공, 시간 초과 0)
   - [X] 색상 패턴(빨강·초록·파랑·흰색)이 바르게 보인다 (AC-04, 스크린샷) — 사용자가 QEMU 창에서 왼쪽부터 빨강·초록·파랑·흰색으로 확인. 호스트 캡처는 받지 못함
 - WI-2.005
-  - [ ] `IOFramebuffer` 필수 메서드를 구현하고 1280×800 한 모드를 보고한다
-  - [ ] `setGammaTable`이 성공을 돌려준다, 하드웨어 커서 미지원을 보고한다
-  - [ ] WindowServer가 이 프레임버퍼로 데스크톱을 그린다
+  - [X] `IOFramebuffer` 필수 메서드를 구현하고 1280×800 한 모드를 보고한다
+  - [X] `setGammaTable`이 성공을 돌려준다, 하드웨어 커서 미지원을 보고한다
+  - [X] WindowServer가 이 프레임버퍼로 데스크톱을 그린다 (2026-11-24, kext 0.0.23 + NdrvBlocker 0.0.1)
 - WI-2.006
-  - [ ] `ioreg`에서 이 드라이버가 붙고 `IONDRVFramebuffer`는 없다 (AC-01)
-  - [ ] 선택한 probe score와 근거를 기록했다
+  - [X] `ioreg`에서 이 드라이버가 붙고 `IONDRVFramebuffer`는 없다 (AC-01)
+  - [X] 선택한 probe score와 근거를 기록했다 (점수 30000. 단 실제 대체는 점수가 아니라 보조 kext의 AAPL,iokit-ignore-ndrv로 이뤄짐, PHASE-PLAN-02)
 - WI-2.007
-  - [ ] 기본 60 Hz로 transfer + flush가 돈다, 주기는 설정으로 바뀐다
+  - [ ] 기본 60 Hz로 transfer + flush가 돈다, 주기는 설정으로 바뀐다 (60 Hz 동작 확인: flush-errors 0. 주기 설정은 아직 상수)
   - [ ] 창 이동·타이핑이 화면에 반영된다 (녹화)
 - WI-2.008
   - [ ] 디버그 옵션으로 초기화 각 단계 실패를 주입해도 부팅이 계속되고 `IONDRVFramebuffer`가 남는다 (AC-06)

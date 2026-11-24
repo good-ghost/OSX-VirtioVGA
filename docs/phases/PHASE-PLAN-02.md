@@ -304,6 +304,28 @@ personality 초안:
 | S. ACPI SSDT `_DSM` | `\_SB.PCI0.S08.S00`에 `_DSM`으로 속성을 넣는다 | `iasl` 컴파일러가 필요(새 도구). DeviceProperties와 다른 경로라 적용될 가능성은 있음 (확인 못 함) |
 | D. DeviceProperties 원인 조사 | 적용되지 않는 원인을 찾는다 | 시간이 얼마나 걸릴지 알 수 없음 |
 
+### WI-2.005·2.006 성공 (2026-11-24, kext 0.0.23 + VirtioVideoNdrvBlocker 0.0.1)
+
+구성: 본 kext는 보조 kernel collection(`/Library/Extensions`), 보조 kext는 OpenCore `Kernel > Add`(부트 collection). DeviceProperties 시험 항목은 지움. boot-args `keepsyms=1`. 백업 `config.plist.bak-20261124-ndrvblocker`.
+
+| 확인 | 결과 |
+| ---- | ---- |
+| 보조 kext | 부트 collection에서 로드(`local.virtiovideo.NdrvBlocker 0.0.1`, IOPCIFamily에만 링크). GPU PCI 장치에 `AAPL,iokit-ignore-ndrv = Yes`, `VVNdrvBlocked = "set"` |
+| IONDRV | **붙지 않음**. `ioreg -c IOFramebuffer`에 `VirtioVideoFramebuffer`만 있음 (AC-01) |
+| 매칭 | GPU 서비스 `VVFramebufferMatch = "rematch-requested"` → 프레임버퍼 연결(`VVFramebufferClient = Yes`) |
+| IOGraphics 호출 순서 (`VVFbTrace`) | `start start-done get(gnps) enableController get(crsr) getConn(lddc,cena,pcnt,flgs,hddc,asns,enab) get(mrdf,wsrv) set(sHDC) set(hdcp) setDisplayMode getConn(pcnt,parm,rgsc,ggsc,bgsc,vblm) … set(capd)` — 부팅 중에 붙으면 `enableController`가 정상 호출된다 |
+| 화면 출력 | `VVScanout = "running resource=1 setups=1 flushes=4740 flush-errors=0"`, 명령 시간 초과 0 |
+| 시스템 정보 | Display Online, Main Display, 1280×800, ARGB8888, Connection Type Internal. "Kernel Extension Info: No Kext Loaded" 줄이 사라짐. VRAM은 아직 3 MB(프레임버퍼 크기 4,096,000, P3에서 128 MiB) |
+| 사용자 확인 | QEMU 창 화면 정상 |
+| 캡처 | `docs/screenshots/p2/2026-11-24-wi2005-virtio-framebuffer.png` (1280×800, WindowServer 기준) |
+
+남은 것·확인 못 한 것
+
+- `IOPowerManagement.CurrentPowerState`는 여전히 0으로 보인다. 동작에는 지장이 없어 보이나 원인은 확인하지 않았다 (WI-4.002에서 전원 처리와 함께 본다).
+- 주기 전송의 CPU 부담은 측정하지 않았다 (부팅 직후라 부하가 커서 의미 있는 값이 아님, NFR-004 WI-5.004).
+- 화면 갱신(창 이동·타이핑)의 녹화(WI-2.007), 실패 경로(WI-2.008), 부트 화면 이어받기(WI-2.009)는 남음.
+- 실행 중 넘겨받기 코드(`vvideo_takeover`)는 패닉 위험 때문에 쓰지 않는다.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

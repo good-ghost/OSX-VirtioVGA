@@ -31,7 +31,7 @@ WI 하나를 끝낼 때 다음 순서를 지킨다.
 
 ## 빌드·검증
 
-- 빌드: `scripts/build.sh [debug|release]` → `build/VirtioVideo.kext`. 종료 코드로 판정한다.
+- 빌드: `scripts/build.sh [debug|release]` → `build/VirtioVideo.kext`(본 드라이버, 보조 collection 설치)와 `build/VirtioVideoNdrvBlocker.kext`(IONDRV 차단 보조 kext, OpenCore 주입). 종료 코드로 판정한다. 보조 kext(`kext-helper/`)는 IOGraphicsFamily 심볼을 쓰면 안 된다(OC 주입 불가, T-04).
   - 링크 경고 "libkmod.a … built for newer 'macOS' version (26.2)"는 SDK 라이브러리 때문이며 알려진 경고다 (PHASE-PLAN-00 결정 기록).
 - 의존성 확인: `kmutil libraries -p build/VirtioVideo.kext` (종료 코드 0), `kmutil print-diagnostics -p build/VirtioVideo.kext`에서 `Dependencies: OK`. 소유권·서명 오류는 OpenCore 주입 방식에서는 무시한다.
 - bundle id와 버전은 `kext/Info.plist`에서만 바꾼다. build.sh가 읽어 `kmod_info`에 넣는다.

@@ -283,6 +283,27 @@ personality 초안:
 - 그와 함께 `kIOPowerAttribute` 처리와 전원 상태 변화를 VVLog로 남겨 `enableController`가 불리는 조건을 확인한다.
 - 그 전까지는 boot-args에서 `vvideo_takeover=1`을 빼 패닉 위험을 없앤다.
 
+### DeviceProperties 방식 시험 (2026-11-24, kext 0.0.23) — 속성이 적용되지 않음
+
+| 확인 | 결과 |
+| ---- | ---- |
+| `IONDRVFramebuffer::probe` | KDK `IONDRVSupport` 디스어셈블: 맨 앞에서 `provider->getProperty("AAPL,iokit-ignore-ndrv")`가 있으면 NULL 반환 (속성 형식 무관) |
+| OC 설정 | `DeviceProperties > Add > PciRoot(0x0)/Pci(0x1,0x0)/Pci(0x0,0x0) > AAPL,iokit-ignore-ndrv = 01000000`. `Delete` 비어 있음, `ProtocolOverrides > DeviceProperties=false` |
+| OC → macOS 전달 | `IODeviceTree:/efi/device-properties`를 디코딩하면 `ACPI(PNP0A03,0)/Pci(0x1,0x0)/Pci(0x0,0x0)`에 `AAPL,iokit-ignore-ndrv`가 들어 있다 |
+| macOS 적용 | GPU(7:0:0)와 IORegistry 전체에 속성 없음. IONDRVFramebuffer가 그대로 붙고 우리 프레임버퍼는 설계대로 매칭에서 빠짐. 화면 정상 |
+| 구분 시험 | 같은 GPU 경로와 루트 포트 경로 `PciRoot(0x0)/Pci(0x1,0x0)`에 무해한 `vv-dp-test` 문자열을 넣고 재부팅 → **둘 다 적용되지 않음** |
+
+결론: 이 VM에서는 OpenCore DeviceProperties가 PCI 장치에 적용되지 않는다 (원인 미확인). `AAPL,iokit-` 이름만 걸러지는 문제가 아니다.
+05:41 패닉 보고서는 05:25 패닉(0.0.22, `vvideo_takeover=1`, 부팅 후 69초)과 내용이 같은 재기록이다.
+
+대안 (결정 필요)
+
+| 대안 | 내용 | 비고 |
+| ---- | ---- | ---- |
+| H. 보조 kext를 OC로 주입 | IOGraphicsFamily에 의존하지 않는 아주 작은 kext가 부트 collection에서 먼저 로드되어 GPU PCI 장치에 매칭되면, probe에서 `AAPL,iokit-ignore-ndrv`를 붙이고 거절(붙지 않음)한다. 부트 collection은 IONDRV가 있는 시스템 collection보다 먼저 매칭되므로 IONDRV가 붙기 전에 속성이 생긴다 | 이미 확인된 OC 주입 경로(WI-0.002~2.004)를 그대로 쓴다. kext가 둘이 된다 |
+| S. ACPI SSDT `_DSM` | `\_SB.PCI0.S08.S00`에 `_DSM`으로 속성을 넣는다 | `iasl` 컴파일러가 필요(새 도구). DeviceProperties와 다른 경로라 적용될 가능성은 있음 (확인 못 함) |
+| D. DeviceProperties 원인 조사 | 적용되지 않는 원인을 찾는다 | 시간이 얼마나 걸릴지 알 수 없음 |
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

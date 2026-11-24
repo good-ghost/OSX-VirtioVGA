@@ -19,7 +19,7 @@ WI 하나를 끝낼 때 다음 순서를 지킨다.
 
 - kext는 커널에서 돈다. 잘못되면 VM이 부팅되지 않는다.
 - **실행 중인 시스템에 kext를 로드(`kmutil load`)하거나 EFI/OpenCore 설정을 바꾸는 일은 매번 사용자에게 확인을 받는다.**
-- kext는 OpenCore `Kernel > Add` 주입으로만 올린다. SIP 설정은 바꾸지 않는다 (REQUIREMENT Q-01 확정).
+- kext는 `/Library/Extensions`(보조 kernel collection)에 설치하고 `sudo kmutil load -z -p`로 등록한 뒤 재부팅한다 (REQUIREMENT Q-01 v1.2, INSTALL.md §3A). OpenCore 주입은 IOGraphicsFamily 심볼을 쓰는 kext를 올리지 못한다(T-04). SIP는 `csr-active-config` 0x201(Kext Signing만 해제)에서 더 풀지 않는다.
 - 대상은 macOS 15.x x86_64만이다 (Q-05). 라이선스는 MIT로 정했다 (Q-10).
 - 설치 전에 롤백 경로(드라이버를 뺀 OpenCore 부팅 항목, 또는 호스트 쪽 디스크 스냅샷)가 준비됐는지 확인한다.
 - 호스트(QEMU)가 넘겨주는 값(응답 길이, scanout 수, EDID 크기 등)은 모두 범위를 검사한 뒤 쓴다.

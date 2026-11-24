@@ -256,6 +256,15 @@ personality 초안:
 
 다음 결정 필요: 해결 후보 A/A'(보조 collection, Q-01 변경). EFI에는 지금 0.0.21이 들어 있어 드라이버가 전혀 로드되지 않는 상태다.
 
+### 보조 collection(A 방식) 시험 (2026-11-24, kext 0.0.21) — 성공
+
+자세한 절차와 출력은 [../research/aux-kc-option-a.md](../research/aux-kc-option-a.md) §8.
+
+- SIP `csr-active-config`=0x201(Kext Signing만 해제), OC 주입 끔, `/Library/Extensions` 설치 후 `sudo kmutil load -z -p`로 AuxKC 재생성 → 재부팅.
+- 0.0.21이 AuxKC에서 로드되어 IOGraphicsFamily에 링크됐고, `VirtioVideoFramebuffer` 클래스가 등록됐다. GPU 장치 초기화·명령·프레임버퍼 할당도 OC 주입 때와 같게 동작했다.
+- 시스템 설정의 허용 버튼은 서명 없는 kext에 효과가 없었고 `-z`(승인 검사 건너뛰기)가 필요했다.
+- 이로써 WI-2.005 본 구현(personality, scanout, takeover)을 이 경로로 진행할 수 있다.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

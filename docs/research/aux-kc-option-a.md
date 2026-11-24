@@ -70,7 +70,21 @@ OC 주입 때와 달리 "config에서 Enabled=false"로 끄는 방법은 없다.
 - **로드 시점**: AuxKC는 부팅 중 시스템 collection 다음에 로드된다. 지금 OC 주입 kext도 IOGraphicsFamily 뒤에 로드되고 있었으므로(T-04) 부트 화면 넘겨받기(R-06)의 조건은 크게 다르지 않을 것으로 본다 (확인 필요).
 - **문서·요구사항**: 승인되면 REQUIREMENT Q-01, §7-3, REQ-070/071/073, INSTALL.md를 바꾼다.
 
-## 6. 확인하지 못한 것
+## 8. 시험 결과 (2026-11-24, kext 0.0.21) — 성공
+
+| 단계 | 결과 |
+| ---- | ---- |
+| OC 설정 | `csr-active-config`=`01020000`, `NVRAM > Delete`에 `csr-active-config` 추가, `Kernel > Add:8` VirtioVideo `Enabled=false`. 현재 EFI `SecureBootModel=Disabled` 확인. 백업 `config.plist.bak-20261124-auxkc-sip` |
+| 재부팅 후 SIP | `csrutil status`: Custom Configuration, **Kext Signing: disabled**, 나머지(Filesystem, Debugging, DTrace, NVRAM, BaseSystem) enabled. `Kernel Extension User Consent: DISABLED` (`spctl kext-consent status`) |
+| 설치 | `sudo ditto` → `/Library/Extensions/VirtioVideo.kext`, `sudo chown -R root:wheel` |
+| `sudo kmutil load -p …` | **Code 27 "not approved to load"**. syspolicyd 로그는 `Kernel Extension ALLOWED`였지만 AuxKC 재생성(kernelmanagerd)이 승인 대기(`(null)` Team ID)로 거절. 대기 중이던 VMwareGfx도 같은 요청에 묶였다 |
+| 시스템 설정 > 개인정보 보호 및 보안 > 허용 | 사용자가 눌렀지만 다시 실행해도 Code 27. 서명 없는 kext는 Team ID 단위 승인 목록에 들어가지 못하는 것으로 본다 (추정) |
+| `sudo kmutil load -z -p …` (`--no-authorization`) | **Code 28 "requires a reboot"**, AuxKC 재생성(933,888 → 1,032,192바이트, 05:11). `kmutil inspect`에 `local.virtiovideo.VirtioVideo 0.0.21` 포함. VMwareGfx는 포함되지 않음 |
+| 재부팅 후 | `kmutil showloaded --collection aux`에 0.0.21 로드, **IOGraphicsFamily(599)·IOPCIFamily에 링크**. `ioclasscount`: VirtioVideoFramebuffer 0(클래스 등록됨, 인스턴스 없음), VirtioGpuDevice 1, VirtioVideoProbe 1. `driver-ok`(0x0F), `0:1280x800`, 물리 연속 프레임버퍼, 자체 시험 pass, MSI-X, 새 패닉 없음. 화면 1280×800(IONDRV) |
+
+결론: **보조 collection으로 IOFramebuffer 하위 클래스를 가진 kext를 올릴 수 있다.** 필요한 것은 SIP 0x201과 `kmutil load -z`이며, 시스템 설정 승인은 서명 없는 kext에 효과가 없었다. 처음 제안의 "0x200으로 승인 단계를 건너뛴다"는 syspolicyd 판정에는 적용됐지만 AuxKC 재생성 단계에는 적용되지 않아 `-z`가 필요했다.
+
+## 6. 확인하지 못한 것 (시험 전 기준)
 
 - 0x201로 충분한지, 승인 화면이 뜨는지 (시험 필요)
 - 현재 EFI의 `SecureBootModel`·`csr-active-config` 실제 값 (사본만 봄)

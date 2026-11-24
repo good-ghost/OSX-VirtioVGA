@@ -77,6 +77,24 @@ kmutil showloaded | grep -i virtiovideo
 ioreg -r -c VirtioVideoProbe -l -w0 -d1 | grep '"VV'
 ```
 
+## 3A. 설치 — 보조 kernel collection (2026-11-24부터 기본, Q-01 v1.2)
+
+IOFramebuffer 하위 클래스는 OpenCore 주입으로 로드되지 않는다(T-04). 그래서 `/Library/Extensions`에 설치한다.
+
+전제 (한 번만): OpenCore `NVRAM > Add > 7C436110-… > csr-active-config` = `01020000`, `NVRAM > Delete > 7C436110-…`에 `csr-active-config`, `Kernel > Add`의 VirtioVideo `Enabled=false`. 재부팅 후 `csrutil status`에서 Kext Signing: disabled 확인.
+
+설치·갱신 (사용자가 터미널에서 비밀번호 입력):
+
+```bash
+sudo rm -rf /Library/Extensions/VirtioVideo.kext && sudo ditto --norsrc --noextattr build/VirtioVideo.kext /Library/Extensions/VirtioVideo.kext && sudo chown -R root:wheel /Library/Extensions/VirtioVideo.kext && sudo kmutil load -z -p /Library/Extensions/VirtioVideo.kext
+```
+
+- `-z`(승인 검사 건너뛰기)가 없으면 Code 27(not approved)로 실패한다. 서명 없는 kext는 시스템 설정의 허용 버튼으로 승인되지 않았다.
+- 정상 결과는 Code 28 "requires a reboot"이다. `kmutil inspect -B /Library/KernelCollections/AuxiliaryKernelExtensions.kc | grep virtiovideo`로 새 버전이 들어갔는지 본 뒤 재부팅한다.
+- 확인: `kmutil showloaded --collection aux | grep -i virtiovideo`
+
+되돌리기: §4의 `-vvideooff`, 부팅이 안 되면 안전 모드(boot-arg `-x` 또는 부팅 시 Shift)로 들어가 `sudo rm -rf /Library/Extensions/VirtioVideo.kext` 후 `sudo kmutil rebuild`, 그래도 안 되면 Recovery에서 `kmutil trigger-panic-medic --volume-root /Volumes/<볼륨>`. SIP 원복은 `csr-active-config`=`00000000`.
+
 ## 4. 드라이버를 끄는 방법
 
 가벼운 것부터 쓴다.
@@ -179,11 +197,19 @@ sudo shutdown -r now
 | `config.plist.bak-20261124-wi1007`    | WI-1.007 Poll 시험 전             | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-wi1006`    | WI-1.006 복구 시험 전             | Enabled=true, boot-args `keepsyms=1 vvideo_irq=2` |
 | `config.plist.bak-20261124-wi2004`    | WI-2.004 패턴 시험 전             | Enabled=true, boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-wi2005-t04` | T-04 스텁(0.0.21) OC 주입 시험 전 | Enabled=true, boot-args `keepsyms=1` |
+| `config.plist.bak-20261124-auxkc-sip` | SIP 0x201·OC 주입 끄기 전 | Enabled=true, csr `00000000` |
 | `config.plist.bak-20261124-wi2004-redo` | 스냅샷 복구 후 WI-2.004 재설치 전 | VirtioVideo 항목이 없는 원래 설정 (복구로 위 백업들은 EFI에서 사라짐) |
 
 위 표에서 `wi2004-redo`를 뺀 백업은 2026-11-24 호스트 스냅샷 "WI-001" 복구로 EFI에서 사라졌다 ([WI-2.004.md](WI-2.004.md)).
 
-## 7. 현재 상태 (2026-11-24, 스냅샷 복구 후 WI-2.004 재설치)
+## 7. 현재 상태 (2026-11-24, 보조 kernel collection 전환 후)
+
+- 로드 경로: **`/Library/Extensions/VirtioVideo.kext` 0.0.21(UUID `95883E93-…`), 보조 kernel collection**. OC `Kernel > Add:8` VirtioVideo는 `Enabled=false`(EFI의 kext 파일은 남아 있음)
+- SIP: `csr-active-config` `01020000` (Kext Signing만 해제), `NVRAM > Delete`에 `csr-active-config`
+- 확인: driver-ok(0x0F), `0:1280x800`, 프레임버퍼 물리 연속, `VirtioVideoFramebuffer` 클래스 등록(인스턴스 0), 화면은 IONDRV
+
+### 이전 상태 (스냅샷 복구 후 WI-2.004 재설치)
 
 - boot-args: `keepsyms=1`, OpenCore `Misc > Debug > Target` 0 (파일 로그 꺼짐)
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (재설치 때 다시 추가)

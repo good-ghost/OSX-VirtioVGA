@@ -5,7 +5,7 @@
 | 항목      | 내용                                                         |
 | --------- | ------------------------------------------------------------ |
 | 문서      | `docs/REQUIREMENT.md`                                        |
-| 버전      | 1.1                                                          |
+| 버전      | 1.2                                                          |
 | 작성일    | 2026-11-23                                                   |
 | 상태      | 확정 — 모든 Open Question 답변 완료. 이후 변경은 변경 이력에 남긴다 |
 | 대상      | OSX-KVM 게스트 macOS용 virtio-gpu 2D 프레임버퍼 드라이버(kext) |
@@ -25,6 +25,7 @@
 | 0.9  | 2026-11-23 | ENHANCE | 사용자 지시 "Use recommendations"로 Q-12(A+B), Q-13(A) 확정. §4.2, §8.1.2, R-03 반영 |
 | 1.0  | 2026-11-23 | ENHANCE | Q-04 답변(시스템 잠자기 사용 안 함, 일정 시간 후 로그인 화면으로 전환)으로 확정. REQ-053 우선순위 M, REQ-054 W, AC-09·R-09 추가, §8.1.3 추가 |
 | 1.1  | 2026-11-24 | ENHANCE | **Q-01 변경**(사용자 승인 "Yes, try it"): T-04 확정(IOGraphicsFamily 심볼을 쓰는 kext는 OC 주입으로 로드 불가)에 따라 `/Library/Extensions`(보조 kernel collection) 설치와 SIP 부분 해제(`csr-active-config` 0x201) 시험으로 전환. 근거 `docs/research/aux-kc-option-a.md`. REQ-070·071·073과 INSTALL.md는 시험 결과를 본 뒤 고친다 |
+| 1.2  | 2026-11-24 | ENHANCE | Q-01 변경 시험 성공으로 확정: SIP 0x201 + `/Library/Extensions`(보조 kernel collection) + `kmutil load -z`. REQ-070·071 설치·롤백 경로를 이 방식으로 바꿈 |
 
 ### 1.2 용어
 
@@ -275,8 +276,8 @@ BAR 해석은 ioreg `assigned-addresses` 인코딩을 읽은 것이다. 각 BAR�
 
 | ID      | 요구사항                                                                                                  | 우선 |
 | ------- | --------------------------------------------------------------------------------------------------------- | ---- |
-| REQ-070 | OpenCore `Kernel > Add` 주입 방식 설치 절차를 문서로 제공한다 (config.plist 항목, `MinKernel`, 순서)      | M |
-| REQ-071 | 롤백 절차를 문서로 제공한다: OC 부팅 항목에서 kext 비활성화, 호스트 디스크 스냅샷 복원                    | M |
+| REQ-070 | 설치 절차를 문서로 제공한다: OpenCore `csr-active-config`(0x201) 설정, `/Library/Extensions` 설치, `kmutil load -z`로 보조 kernel collection 재생성, 재부팅 (Q-01 v1.2). OpenCore 주입 절차는 참고로 남긴다 | M |
+| REQ-071 | 롤백 절차를 문서로 제공한다: `-vvideooff`, 안전 모드(`-x`)로 부팅 후 kext 삭제·`kmutil` 재생성, Recovery `kmutil trigger-panic-medic`, SIP 원복, 호스트 디스크 스냅샷 복원 | M |
 | REQ-072 | 드라이버를 끄는 boot-arg(예: `-vvideooff`)를 둔다. 이 값이 있으면 `probe()`에서 거절한다                  | M |
 | REQ-073 | 개발 중 빠른 반복을 위한 `kmutil load` 방식 절차를 문서화한다 — Q-01 확정(OpenCore 주입만, SIP 유지)으로 이번 범위에서 제외 | W |
 | REQ-074 | `tools/`에 상태 조회 CLI를 둔다 (IORegistry 속성 읽기만, user client 없음)                               | C |
@@ -441,7 +442,7 @@ BAR 해석은 ioreg `assigned-addresses` 인코딩을 읽은 것이다. 각 BAR�
 
 | ID   | 상태 | 질문                                                                                     | 선택지                                                                                         | 권장안 |
 | ---- | ---- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------ |
-| Q-01 | 확정 | 개발 중 kext를 어떻게 올릴까?                                                            | A) OpenCore 주입만(SIP 유지, 매번 재부팅) B) SIP 부분 해제 + `kmutil load`(빠름, 보안 약화) C) A를 기본으로, 필요할 때만 B | A. 재부팅이 필요하지만 SIP를 유지하고 실패 시 OC에서 바로 끌 수 있다. Lilu/WhateverGreen이 OC로 주입되는지도 함께 확인 필요 | **변경 (2026-11-24, v1.1)**: OC 주입으로는 IOFramebuffer 하위 클래스를 올릴 수 없음이 확정되어(T-04), 보조 kernel collection 설치 + SIP 부분 해제(0x201)를 시험한다. 시험 결과에 따라 최종 확정 |
+| Q-01 | 확정 | 개발 중 kext를 어떻게 올릴까?                                                            | A) OpenCore 주입만(SIP 유지, 매번 재부팅) B) SIP 부분 해제 + `kmutil load`(빠름, 보안 약화) C) A를 기본으로, 필요할 때만 B | A. 재부팅이 필요하지만 SIP를 유지하고 실패 시 OC에서 바로 끌 수 있다. Lilu/WhateverGreen이 OC로 주입되는지도 함께 확인 필요 | **변경 (2026-11-24, v1.1)**: OC 주입으로는 IOFramebuffer 하위 클래스를 올릴 수 없음이 확정되어(T-04), 보조 kernel collection 설치 + SIP 부분 해제(0x201)를 시험한다. 시험 결과에 따라 최종 확정 | **확정 (v1.2)**: 0.0.21 시험 성공 (`docs/research/aux-kc-option-a.md` §8) |
 | Q-02 | 확정 | 지원할 최대 해상도는?                                                                    | A) 1920×1200 B) 2560×1600 C) 3840×2160                                                         | B. 버퍼 하나에 약 16 MiB로 메모리 부담이 작고 HiDPI 1280×800을 지원할 수 있다 |
 | Q-03 | 확정 | 프레임버퍼 메모리 풀(= 보고할 VRAM) 기본 크기는?                                         | A) 현재 모드 크기만 B) 64 MiB C) 128 MiB D) 256 MiB                                             | C. 최대 모드 버퍼 2개 + 여유. 메모리 32 GiB 중 wired 128 MiB는 부담이 작다 |
 | Q-04 | 확정 | 호스트 실행 정보: OSX-KVM 실행 스크립트의 장치 옵션, QEMU 버전, 디스플레이 백엔드(GTK/SPICE/VNC), VM 잠자기 사용 여부 | 실행 스크립트 내용 공유 | 받음: QEMU 10.0.13, `-device` 목록(§8.1), `virtio-vga` 기본값(§8.1.1), 백엔드 GTK(§8.1.2), 잠자기 사용 안 함·일정 시간 후 로그인 화면(§8.1.3) |

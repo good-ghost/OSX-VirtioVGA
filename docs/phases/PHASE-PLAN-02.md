@@ -221,6 +221,29 @@ personality 초안:
 - OC 파일 로그는 켜지 않는다. 필요하면 `-v` 화면 로그나 호스트 직렬 로그(`-serial file:…`, boot-arg `serial=3`)를 쓰고, OC 설정 변경은 kext 변경과 다른 부팅에서 단독으로 한다.
 - 시험 전 VM을 끄고 호스트 스냅샷, **설치 전 커밋·푸시**.
 
+### T-04 재조사 (2026-11-24, 재부팅 없이)
+
+| 확인 | 결과 |
+| ---- | ---- |
+| 부트 collection (`BootKernelExtensions.kc`) | IOPCIFamily 2.9, AppleVirtIO 230.100.3 있음. **IOGraphicsFamily 없음** |
+| 시스템 collection (`SystemKernelExtensions.kc`) | **IOGraphicsFamily 599, IONDRVSupport 599** |
+| 보조 collection (`/Library/KernelCollections/AuxiliaryKernelExtensions.kc`) | AppleMobileDevice, HighPointRR, HighPointIOP (서명된 서드파티 kext) |
+| 디스크의 IOGraphicsFamily.kext | `Info.plist`, `iogdiagnose`만 있고 실행 파일 없음. KDK에도 실행 파일 없음(dSYM만) |
+
+판단
+
+- OpenCore는 주입 kext를 **부트 collection에 넣고 그 안의 심볼로 링크**한다. IOFramebuffer를 상속하면 IOGraphicsFamily 심볼(vtable, metaclass)이 필요하지만 부트 collection에는 없다. 0.0.20이 로그 한 줄 없이 사라진 것과 맞는다 (0.0.19까지는 IOGraphicsFamily 심볼을 쓰지 않아 늦게라도 로드됐다).
+- 따라서 **OC 주입만으로는 IOFramebuffer 하위 클래스를 올릴 수 없을 가능성이 높다.** 아직 실기로 확정하지는 않았다.
+
+해결 후보 (모두 결정 변경 또는 위험이 있어 사용자 승인 필요)
+
+| 후보 | 내용 | 문제 |
+| ---- | ---- | ---- |
+| A. 보조 collection 설치 | 프레임버퍼 kext를 `/Library/Extensions`에 두어 보조 collection으로 로드. 보조 collection은 시스템 collection 심볼로 링크할 수 있다. 서드파티 디스플레이 kext의 정상 경로 | 서명되지 않은 kext라 SIP의 kext 서명 검사 해제(`csr-active-config`)와 시스템 설정 승인이 필요 → **Q-01(SIP 유지, OC 주입만) 변경** |
+| A'. 둘로 나누기 | virtio 전송·GPU 장치는 지금처럼 OC 주입, 프레임버퍼만 보조 collection kext로 분리 | A와 같은 SIP 조건. 구조가 복잡해짐 |
+| B. IOGraphicsFamily를 부트 collection에 함께 주입 | | 디스크·KDK 어디에도 실행 파일이 없다. 있어도 시스템 collection과 중복 로드로 부팅 불가 위험 |
+| C. Lilu 방식 런타임 해석 | 링크 없이 실행 중에 IOGraphicsFamily 심볼을 찾아 쓰는 방식 | IOFramebuffer를 상속하려면 vtable을 직접 만들어야 해 매우 불안정. 비권장 |
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

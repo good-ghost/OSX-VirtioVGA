@@ -134,6 +134,27 @@ personality 초안:
 
 ## 6. 결정 기록
 
-(T-01 결과, probe score, 픽셀 형식)
+### WI-2.001 GPU 명령 계층 (2026-11-24)
+
+구현 (kext 0.0.17)
+
+- 명령 계층을 `kext/src/VirtioGpuDeviceCommands.cpp`로 분리했다 (클래스는 `VirtioGpuDevice` 그대로). 두 구현 파일이 같이 쓰는 상수는 `VirtioGpuDevicePrivate.hpp`.
+- `vv/GpuCommand.hpp`: 사양의 모든 명령·응답 이름(`ctrlTypeName`), 응답 검사 결과 + `RESP_ERR_*`를 합친 `CommandResult`. 테스트 2개 추가.
+- `sendCommand(request, response, expected, logArg)`: 직렬 제출(WI-1.007의 `submitCommand`) → 길이·type 검사 → `CommandResult` → IOReturn. 오류 응답은 `kIOReturnBadArgument`(잘못된 id·인자), `kIOReturnNoMemory`(메모리 부족), `kIOReturnIOError`(그 밖) 로 바꾼다. 실패하면 명령 이름·주요 인자·응답 이름·장치가 쓴 길이를 로그로 남긴다. 워크루프 스레드에서 부르면 교착되므로 `kIOReturnNotPermitted`로 거절한다.
+- `sendNodataCommand`: 응답이 헤더뿐인 명령용. P2 이후 resource·scanout·flush 명령은 이것을 쓴다.
+- 디버그 빌드 자체 시험: 시작 때 없는 resource(`0xfffffff0`) `RESOURCE_UNREF` → `ERR_INVALID_RESOURCE_ID` 기대.
+
+실기 확인
+
+| 항목 | 결과 |
+| ---- | ---- |
+| GET_DISPLAY_INFO (sendCommand 경유) | `0:1280x800` |
+| 자체 시험 | `invalid-unref=err-invalid-resource-id ioreturn=0xe00002c2 pass` |
+| 로그 | `RESOURCE_UNREF arg=0xfffffff0 -> ERR_INVALID_RESOURCE_ID (err-invalid-resource-id, written 24)` |
+| 카운터 | `commands=2 errors=1 timeouts=0 recoveries=0` (오류 1은 자체 시험) |
+
+확인하지 못한 것: 시간 초과 경로(장치가 항상 응답). WI-1.006에서 같은 복구 경로를 외부 reset 흉내로 확인했다.
+
+(이후: T-01 결과, probe score, 픽셀 형식)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

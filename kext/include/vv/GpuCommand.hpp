@@ -47,6 +47,91 @@ constexpr ResponseError checkResponse(uint32_t written, uint32_t minBytes, uint3
     return ResponseError::None;
 }
 
+// 로그에 남길 명령·응답 이름 (REQ-023: 오류 시 명령 이름을 남긴다). 모르는 값은 "unknown".
+constexpr const char *ctrlTypeName(uint32_t type)
+{
+    switch (static_cast<CtrlType>(type)) {
+    case CtrlType::CmdGetDisplayInfo: return "GET_DISPLAY_INFO";
+    case CtrlType::CmdResourceCreate2d: return "RESOURCE_CREATE_2D";
+    case CtrlType::CmdResourceUnref: return "RESOURCE_UNREF";
+    case CtrlType::CmdSetScanout: return "SET_SCANOUT";
+    case CtrlType::CmdResourceFlush: return "RESOURCE_FLUSH";
+    case CtrlType::CmdTransferToHost2d: return "TRANSFER_TO_HOST_2D";
+    case CtrlType::CmdResourceAttachBacking: return "RESOURCE_ATTACH_BACKING";
+    case CtrlType::CmdResourceDetachBacking: return "RESOURCE_DETACH_BACKING";
+    case CtrlType::CmdGetCapsetInfo: return "GET_CAPSET_INFO";
+    case CtrlType::CmdGetCapset: return "GET_CAPSET";
+    case CtrlType::CmdGetEdid: return "GET_EDID";
+    case CtrlType::CmdUpdateCursor: return "UPDATE_CURSOR";
+    case CtrlType::CmdMoveCursor: return "MOVE_CURSOR";
+    case CtrlType::RespOkNodata: return "OK_NODATA";
+    case CtrlType::RespOkDisplayInfo: return "OK_DISPLAY_INFO";
+    case CtrlType::RespOkCapsetInfo: return "OK_CAPSET_INFO";
+    case CtrlType::RespOkCapset: return "OK_CAPSET";
+    case CtrlType::RespOkEdid: return "OK_EDID";
+    case CtrlType::RespErrUnspec: return "ERR_UNSPEC";
+    case CtrlType::RespErrOutOfMemory: return "ERR_OUT_OF_MEMORY";
+    case CtrlType::RespErrInvalidScanoutId: return "ERR_INVALID_SCANOUT_ID";
+    case CtrlType::RespErrInvalidResourceId: return "ERR_INVALID_RESOURCE_ID";
+    case CtrlType::RespErrInvalidContextId: return "ERR_INVALID_CONTEXT_ID";
+    case CtrlType::RespErrInvalidParameter: return "ERR_INVALID_PARAMETER";
+    }
+    return "unknown";
+}
+
+// 명령 결과. 커널 쪽은 이것을 IOReturn으로 바꾼다 (VirtioGpuDeviceCommands.cpp).
+enum class CommandResult {
+    Ok,
+    Transport,          // 보내지 못함·시간 초과 등 응답을 받기 전의 실패
+    TooShort,
+    UnexpectedType,
+    ErrUnspec,
+    ErrOutOfMemory,
+    ErrInvalidScanoutId,
+    ErrInvalidResourceId,
+    ErrInvalidContextId,
+    ErrInvalidParameter,
+    ErrUnknown,         // 사양에 없는 RESP_ERR 값
+};
+
+// 응답 검사 결과와 응답 type을 합쳐 명령 결과로 바꾼다.
+constexpr CommandResult commandResultFor(ResponseError check, uint32_t responseType)
+{
+    switch (check) {
+    case ResponseError::None: return CommandResult::Ok;
+    case ResponseError::TooShort: return CommandResult::TooShort;
+    case ResponseError::UnexpectedType: return CommandResult::UnexpectedType;
+    case ResponseError::ErrorType: break;
+    }
+    switch (static_cast<CtrlType>(responseType)) {
+    case CtrlType::RespErrUnspec: return CommandResult::ErrUnspec;
+    case CtrlType::RespErrOutOfMemory: return CommandResult::ErrOutOfMemory;
+    case CtrlType::RespErrInvalidScanoutId: return CommandResult::ErrInvalidScanoutId;
+    case CtrlType::RespErrInvalidResourceId: return CommandResult::ErrInvalidResourceId;
+    case CtrlType::RespErrInvalidContextId: return CommandResult::ErrInvalidContextId;
+    case CtrlType::RespErrInvalidParameter: return CommandResult::ErrInvalidParameter;
+    default: return CommandResult::ErrUnknown;
+    }
+}
+
+constexpr const char *commandResultName(CommandResult result)
+{
+    switch (result) {
+    case CommandResult::Ok: return "ok";
+    case CommandResult::Transport: return "transport";
+    case CommandResult::TooShort: return "too-short";
+    case CommandResult::UnexpectedType: return "unexpected-type";
+    case CommandResult::ErrUnspec: return "err-unspec";
+    case CommandResult::ErrOutOfMemory: return "err-out-of-memory";
+    case CommandResult::ErrInvalidScanoutId: return "err-invalid-scanout-id";
+    case CommandResult::ErrInvalidResourceId: return "err-invalid-resource-id";
+    case CommandResult::ErrInvalidContextId: return "err-invalid-context-id";
+    case CommandResult::ErrInvalidParameter: return "err-invalid-parameter";
+    case CommandResult::ErrUnknown: return "err-unknown";
+    }
+    return "unknown";
+}
+
 // display info에서 볼 scanout 수. 장치 config의 num_scanouts를 그대로 믿지 않고 응답 배열 크기로 자른다.
 constexpr uint32_t usableScanouts(uint32_t numScanouts)
 {

@@ -31,6 +31,7 @@
 #include <kern/thread_call.h>
 
 #include "vv/DeviceHealth.hpp"
+#include "vv/GpuCommand.hpp"
 #include "vv/VirtioIrq.hpp"
 
 class IOCommandGate;
@@ -81,7 +82,16 @@ private:
     IOReturn submitCommand(const void *request, uint32_t requestBytes, void *response, uint32_t responseBytes,
                            uint32_t *written);
     static IOReturn gatedSubmit(OSObject *owner, void *request, void *response, void *lengths, void *written);
+    // 명령을 보내고 응답 길이·type을 검사한다 (WI-2.001). 실패하면 명령 이름·logArg·응답 이름을 로그로 남긴다.
+    // 워크루프 스레드에서 부르면 교착되므로 거절한다(kIOReturnNotPermitted). resultOut은 선택.
+    IOReturn sendCommand(const void *request, uint32_t requestBytes, void *response, uint32_t responseBytes,
+                         vv::virtio::gpu::CtrlType expected, uint32_t logArg,
+                         vv::virtio::gpu::CommandResult *resultOut = nullptr);
+    // 응답이 헤더(RESP_OK_NODATA)뿐인 명령.
+    IOReturn sendNodataCommand(const void *request, uint32_t requestBytes, uint32_t logArg,
+                               vv::virtio::gpu::CommandResult *resultOut = nullptr);
     void queryDisplayInfo();
+    void runSelfTest();
 
     void handleQueueEvent(unsigned queue);
     void handleConfigEvent();
@@ -115,6 +125,7 @@ private:
     uint32_t mCommandWritten = 0;
     uint32_t mCommandsSent = 0;
     uint32_t mCommandTimeouts = 0;
+    uint32_t mCommandErrors = 0;
 
     IOTimerEventSource *mStatusTimer = nullptr;
     IOTimerEventSource *mPollTimer = nullptr;

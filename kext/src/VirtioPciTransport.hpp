@@ -1,6 +1,7 @@
 // virtio 1.x modern PCI 전송 계층 (REQ-010, REQ-018).
 // WI-1.002: capability를 찾아 영역을 고르고 BAR를 매핑한 뒤, 영역 경계를 검사하는 레지스터 접근을 제공한다.
-// WI-1.003: reset, 상태 비트, feature 읽기·쓰기 (§3.1.1 초기화 순서의 앞부분). 큐 설정은 WI-1.004.
+// WI-1.003: reset, 상태 비트, feature 읽기·쓰기 (§3.1.1 초기화 순서의 앞부분).
+// WI-1.004: 큐 등록 (§4.1.5.1.3). MSI-X 벡터는 WI-1.005 전까지 NO_VECTOR로 둔다.
 // GPU 코드와 분리해 다른 virtio 장치에도 쓸 수 있게 둔다.
 #pragma once
 
@@ -9,6 +10,7 @@
 #include "vv/VirtioPciLayout.hpp"
 
 class IOPCIDevice;
+class VirtioQueue;
 class IOMemoryMap;
 
 class VirtioPciTransport : public OSObject {
@@ -28,7 +30,9 @@ public:
     uint32_t deviceRead32(uint32_t offset, bool *ok = nullptr) const;
 
     bool commonWrite8(uint32_t offset, uint8_t value);
+    bool commonWrite16(uint32_t offset, uint16_t value);
     bool commonWrite32(uint32_t offset, uint32_t value);
+    bool commonWrite64(uint32_t offset, uint64_t value);  // 하위·상위 32비트로 나눠 쓴다 (§4.1.3.1 허용)
 
     // §4.1.4.3.2: device_status에 0을 쓰고 0이 읽힐 때까지 기다린다. 시간 안에 안 되면 false.
     bool reset();
@@ -39,6 +43,14 @@ public:
     uint64_t readDeviceFeatures();
     bool writeDriverFeatures(uint64_t features);
     uint64_t readDriverFeatures();
+
+    uint16_t numQueues() const;
+    // 장치가 허용하는 최대 큐 크기. 0이면 그 큐는 없다. queue_select에 쓴다.
+    uint16_t queueMaxSize(uint16_t index);
+    // 큐 메모리 주소·크기를 장치에 알리고 켠다. 알림 오프셋을 queue에 기록한다.
+    bool setupQueue(VirtioQueue *queue);
+    // 큐가 켜져 있는지 확인한다. 끄는 것은 reset으로만 한다 (드라이버가 queue_enable에 0을 쓰는 것은 사양상 금지).
+    bool isQueueEnabled(uint16_t index);
 
     void free() override;
 

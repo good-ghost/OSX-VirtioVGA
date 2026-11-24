@@ -4,6 +4,7 @@
 #include <IOKit/pci/IOPCIDevice.h>
 
 #include "VVLog.hpp"
+#include "VirtioQueue.hpp"
 #include "vv/PciCapWalk.hpp"
 
 OSDefineMetaClassAndStructors(VirtioPciTransport, OSObject)
@@ -244,5 +245,76 @@ uint64_t VirtioPciTransport::readDriverFeatures()
     commonWrite32(offsetof(CommonCfg, driverFeatureSelect), 1);
     const uint64_t high = commonRead32(offsetof(CommonCfg, driverFeature));
     return (high << kFeatureWordBits) | low;
+}
+
+bool VirtioPciTransport::commonWrite16(uint32_t offset, uint16_t value)
+{
+    return writeAt<uint16_t>(regionAddress(mLayout.common, offset, sizeof(uint16_t)), value);
+}
+
+bool VirtioPciTransport::commonWrite64(uint32_t offset, uint64_t value)
+{
+    return commonWrite32(offset, static_cast<uint32_t>(value)) &&
+           commonWrite32(offset + sizeof(uint32_t), static_cast<uint32_t>(value >> kFeatureWordBits));
+}
+
+uint16_t VirtioPciTransport::numQueues() const
+{
+    return commonRead16(offsetof(CommonCfg, numQueues));
+}
+
+uint16_t VirtioPciTransport::queueMaxSize(uint16_t index)
+{
+    if (index >= numQueues() || !commonWrite16(offsetof(CommonCfg, queueSelect), index)) {
+        return 0;
+    }
+    return commonRead16(offsetof(CommonCfg, queueSize));
+}
+
+bool VirtioPciTransport::setupQueue(VirtioQueue *queue)
+{
+    if (queue == nullptr) {
+        return false;
+    }
+    const uint16_t index = queue->index();
+    const uint16_t maxSize = queueMaxSize(index);
+    if (maxSize == 0 || queue->size() > maxSize) {
+        VV_LOG_ERR("transport: queue %u size %u invalid (max %u)", index, queue->size(), maxSize);
+        return false;
+    }
+    if (commonRead16(offsetof(CommonCfg, queueEnable)) != 0) {
+        // reset 직후에는 모든 큐가 꺼져 있어야 한다. 켜진 큐를 다시 설정하지 않는다.
+        VV_LOG_ERR("transport: queue %u already enabled", index);
+        return false;
+    }
+    uint32_t notifyOffset = 0;
+    const uint16_t notifyOff = commonRead16(offsetof(CommonCfg, queueNotifyOff));
+    if (!vv::virtio::pci::notifyOffsetFor(mLayout, notifyOff, notifyOffset)) {
+        VV_LOG_ERR("transport: queue %u notify_off %u outside notify region", index, notifyOff);
+        return false;
+    }
+    // §4.1.5.1.3: 크기·벡터·주소를 쓰고 마지막에 queue_enable=1.
+    const bool written = commonWrite16(offsetof(CommonCfg, queueSize), queue->size()) &&
+                         commonWrite16(offsetof(CommonCfg, queueMsixVector), vv::virtio::pci::kMsiNoVector) &&
+                         commonWrite64(offsetof(CommonCfg, queueDesc), queue->descAddress()) &&
+                         commonWrite64(offsetof(CommonCfg, queueDriver), queue->availAddress()) &&
+                         commonWrite64(offsetof(CommonCfg, queueDevice), queue->usedAddress()) &&
+                         commonWrite16(offsetof(CommonCfg, queueEnable), 1);
+    if (!written || commonRead16(offsetof(CommonCfg, queueEnable)) != 1) {
+        VV_LOG_ERR("transport: queue %u enable failed", index);
+        return false;
+    }
+    queue->setNotifyOffset(notifyOffset);
+    VV_LOG_INFO("transport: queue %u size=%u max=%u notify_off=%u (offset 0x%x)", index, queue->size(), maxSize,
+                notifyOff, notifyOffset);
+    return true;
+}
+
+bool VirtioPciTransport::isQueueEnabled(uint16_t index)
+{
+    if (!commonWrite16(offsetof(CommonCfg, queueSelect), index)) {
+        return false;
+    }
+    return commonRead16(offsetof(CommonCfg, queueEnable)) == 1;
 }
 

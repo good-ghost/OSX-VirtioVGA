@@ -97,5 +97,19 @@ mkdir -p "$DSYM_ARCHIVE"
 rm -rf "$DSYM_ARCHIVE/$KEXT_UUID.dSYM"
 cp -R "$DSYM" "$DSYM_ARCHIVE/$KEXT_UUID.dSYM"
 
+# 코드가 쓰는 KPI가 Info.plist의 OSBundleLibraries에 모두 선언됐는지 확인한다.
+# 빠지면 빌드는 되지만 부팅 때 "failed to resolve" 없이 심볼 해석에 실패할 수 있다 (WI-1.004에서 kpi.mach 누락 발견).
+required_libraries="$(kmutil libraries -p "$BUNDLE" --xml 2>/dev/null \
+  | plutil -extract OSBundleLibraries xml1 -o - - \
+  | awk -F'[<>]' '/<key>/ { print $3 }')"
+missing=""
+for library in $required_libraries; do
+  /usr/libexec/PlistBuddy -c "Print :OSBundleLibraries:$library" "$INFO_PLIST" >/dev/null 2>&1 || missing="$missing $library"
+done
+if [ -n "$missing" ]; then
+  echo "Info.plist OSBundleLibraries에 선언되지 않은 라이브러리:$missing" >&2
+  exit 1
+fi
+
 echo "built $BUNDLE ($BUNDLE_ID $VERSION, $CONFIG)"
 echo "dsym  $DSYM"

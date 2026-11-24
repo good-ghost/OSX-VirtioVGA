@@ -175,3 +175,30 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 - QEMU `virtio-vga,help`에는 `queue_reset=on`이 있지만 장치는 `VIRTIO_F_RING_RESET`(비트 40)을 제공하지 않았다. `ACCESS_PLATFORM`(33)도 없다 (`iommu_platform=off`와 일치).
 - `VERSION_1` 없는 장치에서 실패하는 경로는 실제 장치로 만들 수 없어 단위 테스트로만 확인했다.
 
+### WI-1.004 (2026-11-24)
+
+구현
+
+- `vv/SplitRing.hpp`: 디스크립터 빈 목록, 체인 등록(add)과 회수(collect), avail idx 공개 전 메모리 배리어(§2.7.13), 장치의 범위 밖 used id를 `DeviceError`로 구분. desc·avail·used를 한 블록에 정렬(16/2/4)해 배치하는 `ringLayout`.
+- `VVDmaBuffer`: page 단위 물리 연속 할당(`kIOMemoryPhysicallyContiguous`) + `IODMACommand`(64비트, kMapped)로 장치 주소 1세그먼트. 프레임버퍼(T-01)에도 쓸 예정.
+- `VirtioQueue`: 큐 하나의 DMA 메모리와 링. `VirtioPciTransport::setupQueue`: queue_select → 크기·MSI-X 벡터(NO_VECTOR, WI-1.005 전까지)·세 주소(64비트는 32비트 두 번) → 마지막에 queue_enable=1, 다시 읽어 확인. 알림 오프셋을 notify 영역 경계로 검사.
+- `VirtioGpuDevice`: controlq 64, cursorq 16(장치 최대 이하 2의 거듭제곱) 등록 후 DRIVER_OK. 종료·실패 때는 reset을 먼저 하고 큐 메모리를 놓는다.
+- `build.sh`: kext가 쓰는 KPI와 `OSBundleLibraries` 선언을 비교해 빠지면 실패한다. 이번에 `kernel_task` 때문에 `com.apple.kpi.mach`가 필요했는데 선언이 빠져 있었다 (빌드는 됐지만 로드 때 심볼 해석에 실패할 수 있었다).
+
+실기 확인 (kext 0.0.11, UUID `9D7194ED-…`, 수집본 `env-*-wi1004-driver-ok.txt`)
+
+| 항목 | 값 |
+| ---- | -- |
+| 장치 상태 | `0x0F` (ACK, DRIVER, FEATURES_OK, DRIVER_OK) |
+| controlq | 크기 64, 장치 최대 1024, notify_off 0 → 오프셋 0x0, enabled=1 |
+| cursorq | 크기 16, 장치 최대 1024, notify_off 1 → 오프셋 0x4, enabled=1 |
+| 화면 | DRIVER_OK 뒤에도 IONDRV 1280×800 그대로. 명령을 보내지 않은 상태에서는 VGA 출력이 유지됐다 |
+| 상태 감시 | 부팅 후 약 4분, 122회 확인, 불일치 0 (DRIVER_OK 상태에서도 외부 reset 없음, T-05) |
+| 패닉 | 없음 |
+
+관찰
+
+- 장치 최대 큐 크기는 두 큐 모두 1024다 (계획서의 예상 256과 다름).
+- 큐 주소는 물리 주소 성격이라 IORegistry에 공개하지 않았다 (크기·오프셋만).
+- 장치 쪽이 링을 실제로 읽고 쓰는 것은 명령을 보내는 WI-1.007에서 처음 확인된다.
+

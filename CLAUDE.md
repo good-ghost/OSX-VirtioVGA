@@ -35,6 +35,7 @@ WI 하나를 끝낼 때 다음 순서를 지킨다.
   - 링크 경고 "libkmod.a … built for newer 'macOS' version (26.2)"는 SDK 라이브러리 때문이며 알려진 경고다 (PHASE-PLAN-00 결정 기록).
 - 의존성 확인: `kmutil libraries -p build/VirtioVideo.kext` (종료 코드 0), `kmutil print-diagnostics -p build/VirtioVideo.kext`에서 `Dependencies: OK`. 소유권·서명 오류는 OpenCore 주입 방식에서는 무시한다.
 - bundle id와 버전은 `kext/Info.plist`에서만 바꾼다. build.sh가 읽어 `kmod_info`에 넣는다.
+- build.sh는 kext가 쓰는 KPI가 `OSBundleLibraries`에 모두 선언됐는지 검사한다. 실패하면 메시지의 라이브러리를 Info.plist에 추가한다 (버전은 macOS 15 하한 `24.0`, 패밀리는 `1.0`).
 - 단위 테스트: `scripts/test.sh` → `build/tests/vv-tests` (종료 코드 0 = 통과). 대상은 `kext/include/vv/`의 커널 비의존 코드이고 테스트는 `tests/*.cpp`에 `VV_TEST`로 쓴다. ASan·UBSan을 켜고 빌드한다.
 - 사양 상수·구조체는 `kext/include/vv/VirtioSpec.hpp`, `VirtioGpuSpec.hpp`에만 둔다. 매직 넘버를 코드에 직접 쓰지 않는다.
 - 드라이버 로그: 통합 로그에는 남지 않는다. `ioreg -r -c <클래스> -l -w0 | grep '"VV'`로 `VVLog` 속성을 읽는다. 수준은 boot-arg `vvideo_log=0|1|2`.

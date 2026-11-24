@@ -128,6 +128,20 @@ inline LayoutError buildLayout(const vv::pci::VirtioCap *caps, size_t count, con
     return LayoutError::None;
 }
 
+// 원하는 크기와 장치 최대 크기 중 작은 쪽 이하의 가장 큰 2의 거듭제곱. 장치 최대가 0이면 큐가 없다는 뜻이라 0.
+constexpr uint16_t chooseQueueSize(uint16_t desired, uint16_t deviceMax)
+{
+    const uint16_t limit = desired < deviceMax ? desired : deviceMax;
+    if (limit == 0) {
+        return 0;
+    }
+    uint16_t size = 1;
+    while (static_cast<uint32_t>(size) * 2 <= limit) {
+        size = static_cast<uint16_t>(size * 2);
+    }
+    return size;
+}
+
 // 큐 알림 주소의 notify 영역 안 오프셋 (§4.1.4.4). 영역을 벗어나면 false.
 constexpr bool notifyOffsetFor(const Layout &layout, uint16_t queueNotifyOff, uint32_t &offsetOut)
 {

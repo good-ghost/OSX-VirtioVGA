@@ -7,6 +7,7 @@
 #include "VVBootArgs.hpp"
 #include "VVLog.hpp"
 #include "VirtioPciTransport.hpp"
+#include "VirtioQueue.hpp"
 #include "vv/PciCapWalk.hpp"
 #include "vv/VirtioFeatures.hpp"
 #include "vv/VirtioGpuSpec.hpp"
@@ -19,6 +20,9 @@ namespace v = vv::virtio;
 
 // 상태 감시 주기. 외부(Apple 전송 드라이버 등)가 장치를 reset하는지 보기 위한 것이라 촘촘할 필요가 없다.
 constexpr uint32_t kStatusWatchIntervalMs = 2000;
+// 원하는 큐 크기. 장치 최대가 더 작으면 그에 맞춘다. 명령은 한 번에 하나씩 보내므로(REQ-024) 크게 둘 필요가 없다.
+constexpr uint16_t kDesiredControlQueueSize = 64;
+constexpr uint16_t kDesiredCursorQueueSize = 16;
 
 uint32_t high32(uint64_t value)
 {
@@ -106,10 +110,65 @@ bool VirtioGpuDevice::initializeDevice()
         failDevice("features-not-accepted");
         return false;
     }
-    mExpectedStatus = status;
-    setProperty("VVInitResult", "features-ok");
-    setProperty("VVDeviceStatus", status, 8);
-    VV_LOG_INFO("gpu: FEATURES_OK accepted, status=0x%02x (DRIVER_OK after queues, WI-1.004)", status);
+    VV_LOG_INFO("gpu: FEATURES_OK accepted, status=0x%02x", status);
+
+    if (!setupQueues()) {
+        failDevice("queues");
+        return false;
+    }
+    // §3.1.1 8단계: 장치별 설정(큐)을 마친 뒤 DRIVER_OK. 이 뒤로 장치는 큐를 쓸 수 있다.
+    mTransport->addStatus(v::status::kDriverOk);
+    const uint8_t live = mTransport->status();
+    if ((live & v::status::kDriverOk) == 0 || (live & v::status::kDeviceNeedsReset) != 0) {
+        failDevice("driver-ok");
+        return false;
+    }
+    mExpectedStatus = live;
+    setProperty("VVInitResult", "driver-ok");
+    setProperty("VVDeviceStatus", live, 8);
+    VV_LOG_INFO("gpu: DRIVER_OK, status=0x%02x", live);
+    return true;
+}
+
+bool VirtioGpuDevice::setupQueues()
+{
+    const uint16_t queueCount = mTransport->numQueues();
+    setProperty("VVNumQueues", queueCount, 16);
+    if (queueCount <= v::gpu::kCursorQueue) {
+        VV_LOG_ERR("gpu: device has %u queues, need 2", queueCount);
+        return false;
+    }
+    struct Plan {
+        uint16_t index;
+        uint16_t desired;
+        VirtioQueue **slot;
+        const char *property;
+    };
+    const Plan plans[] = {
+        {v::gpu::kControlQueue, kDesiredControlQueueSize, &mControlQueue, "VVControlQueue"},
+        {v::gpu::kCursorQueue, kDesiredCursorQueueSize, &mCursorQueue, "VVCursorQueue"},
+    };
+    for (const Plan &plan : plans) {
+        const uint16_t maxSize = mTransport->queueMaxSize(plan.index);
+        const uint16_t size = v::pci::chooseQueueSize(plan.desired, maxSize);
+        if (size == 0) {
+            VV_LOG_ERR("gpu: queue %u not available (max %u)", plan.index, maxSize);
+            return false;
+        }
+        VirtioQueue *queue = VirtioQueue::withSize(plan.index, size);
+        if (queue == nullptr) {
+            VV_LOG_ERR("gpu: queue %u allocation failed", plan.index);
+            return false;
+        }
+        *plan.slot = queue;
+        if (!mTransport->setupQueue(queue)) {
+            return false;
+        }
+        char summary[64];
+        snprintf(summary, sizeof(summary), "size=%u max=%u notify=0x%x enabled=%d", size, maxSize,
+                 queue->notifyOffset(), mTransport->isQueueEnabled(plan.index));
+        setProperty(plan.property, summary);
+    }
     return true;
 }
 
@@ -118,13 +177,30 @@ void VirtioGpuDevice::failDevice(const char *reason)
     VV_LOG_ERR("gpu: init failed: %s", reason);
     setProperty("VVInitResult", reason);
     if (mTransport != nullptr) {
-        // §3.1.1: 회복할 수 없으면 FAILED를 쓴다. 그 뒤 reset해서 장치를 깨끗한 상태로 돌려 둔다.
+        // §3.1.1: 회복할 수 없으면 FAILED를 쓴다.
         mTransport->addStatus(v::status::kFailed);
+    }
+    releaseDevice();
+    vv::publishLog(this);
+}
+
+void VirtioGpuDevice::releaseDevice()
+{
+    // 장치가 큐 메모리를 더 쓰지 않도록 reset을 먼저 하고, 그 뒤에 큐 메모리를 놓는다.
+    if (mTransport != nullptr) {
         mTransport->reset();
+    }
+    VirtioQueue **queues[] = {&mControlQueue, &mCursorQueue};
+    for (VirtioQueue **queue : queues) {
+        if (*queue != nullptr) {
+            (*queue)->release();
+            *queue = nullptr;
+        }
+    }
+    if (mTransport != nullptr) {
         mTransport->release();
         mTransport = nullptr;
     }
-    vv::publishLog(this);
 }
 
 void VirtioGpuDevice::publishPciDiagnostics(IOPCIDevice *pci)
@@ -203,12 +279,8 @@ void VirtioGpuDevice::checkStatus()
 void VirtioGpuDevice::stop(IOService *provider)
 {
     stopStatusWatch();
-    if (mTransport != nullptr) {
-        // 장치를 다른 드라이버(또는 다음 부팅)가 처음부터 쓸 수 있게 reset해 둔다.
-        mTransport->reset();
-        mTransport->release();
-        mTransport = nullptr;
-    }
+    // 장치를 다른 드라이버(또는 다음 부팅)가 처음부터 쓸 수 있게 reset해 둔다.
+    releaseDevice();
     VV_LOG_INFO("gpu: stop");
     vv::publishLog(this);
     IOService::stop(provider);

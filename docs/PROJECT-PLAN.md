@@ -89,7 +89,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-1.001  | AppleVirtIOPCITransport 공존 조사                   | 1.5     |
 | [X]    | WI-1.002  | PCI capability 파싱과 BAR 매핑                      | 1.5     |
 | [X]    | WI-1.003  | 장치 초기화와 feature 협상                          | 1       |
-| [ ]    | WI-1.004  | split virtqueue                                     | 2       |
+| [X]    | WI-1.004  | split virtqueue                                     | 2       |
 | [ ]    | WI-1.005  | MSI-X·INTx 인터럽트와 폴링 모드                     | 2       |
 | [ ]    | WI-1.006  | 장치 reset 처리와 전송 클래스 분리                  | 1       |
 | [ ]    | WI-1.007  | 전송 계층 통합 확인 (GET_DISPLAY_INFO 왕복)         | 1       |
@@ -108,9 +108,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 3D/blob feature(`VIRGL`, `RESOURCE_BLOB`, `CONTEXT_INIT`)를 협상하지 않는다 — 금지 목록과 static_assert, 단위 테스트
   - [X] 장치가 제공한 feature와 협상한 feature를 로그와 IORegistry에 남긴다 (`VVDeviceFeatures`, `VVDriverFeatures`)
 - WI-1.004
-  - [ ] 디스크립터 테이블·avail·used 링을 DMA 가능한 메모리로 할당하고 주소를 장치에 설정한다
-  - [ ] 인덱스 wrap-around를 포함한 링 로직 단위 테스트가 통과한다
-  - [ ] 큐 크기를 장치가 알려 준 값 이하로 정한다
+  - [X] 디스크립터 테이블·avail·used 링을 DMA 가능한 메모리로 할당하고 주소를 장치에 설정한다 (`VVDmaBuffer` 물리 연속 1세그먼트, `setupQueue`, 두 큐 enabled=1)
+  - [X] 인덱스 wrap-around를 포함한 링 로직 단위 테스트가 통과한다 (`SplitRingTests`, 70000회 왕복)
+  - [X] 큐 크기를 장치가 알려 준 값 이하로 정한다 (`chooseQueueSize`, 장치 최대 1024 → controlq 64, cursorq 16)
 - WI-1.005
   - [ ] MSI-X 벡터 3개(config, controlq, cursorq)를 배정하고 인터럽트를 받는다
   - [ ] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다

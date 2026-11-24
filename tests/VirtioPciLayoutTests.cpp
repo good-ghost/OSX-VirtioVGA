@@ -101,3 +101,14 @@ VV_TEST(layout_notifyOffset_boundsChecked)
     VV_EXPECT(p::notifyOffsetFor(layout, 1023, offset) && offset == 4092);  // 마지막 2바이트까지 들어간다
     VV_EXPECT(!p::notifyOffsetFor(layout, 1024, offset));                   // 0x1000 = 영역 끝
 }
+
+VV_TEST(layout_chooseQueueSize_powerOfTwoWithinDeviceMax)
+{
+    VV_EXPECT(p::chooseQueueSize(64, 256) == 64);
+    VV_EXPECT(p::chooseQueueSize(64, 16) == 16);
+    VV_EXPECT(p::chooseQueueSize(64, 48) == 32);   // 장치 최대가 2의 거듭제곱이 아니어도 그 이하로
+    VV_EXPECT(p::chooseQueueSize(64, 0) == 0);     // 큐 없음
+    VV_EXPECT(p::chooseQueueSize(0, 256) == 0);
+    VV_EXPECT(p::chooseQueueSize(1, 256) == 1);
+    VV_EXPECT(p::chooseQueueSize(65535, 32768) == 32768);
+}

@@ -202,3 +202,34 @@ AI가 코드와 단위 테스트를 만들고 빌드·테스트 종료 코드를
 - 큐 주소는 물리 주소 성격이라 IORegistry에 공개하지 않았다 (크기·오프셋만).
 - 장치 쪽이 링을 실제로 읽고 쓰는 것은 명령을 보내는 WI-1.007에서 처음 확인된다.
 
+### WI-1.005 (2026-11-24, 구현 완료·수신 확인은 WI-1.007)
+
+실측
+
+- `IOPCIDevice::configureInterrupts`는 MSI-X(3개)와 레벨 둘 다 `0xe00002c7`(kIOReturnUnsupported)을 돌려준다 (kext 0.0.12). 실패 경로에서 장치는 FAILED → reset되고 화면은 IONDRV로 유지됐다.
+- GPU 장치의 인터럽트 소스는 `IOInterruptControllers = (IOPCIMessagedInterruptController)`, 인덱스 0 하나(`0:msix`)뿐이다. PCI 계층이 MSI-X 벡터 1개를 미리 구성해 두며, 레거시(INTx) 소스는 없다.
+
+구현 (kext 0.0.13~0.0.14)
+
+- `configureInterrupts`를 부르지 않고 이미 있는 소스를 쓴다. `vv/VirtioIrq.hpp`의 `effectiveIrqMode`: MSI-X 소스가 있으면 MSI-X, 없고 레거시가 있으면 INTx, 둘 다 없으면 Poll. MSI-X 소스가 3개 미만이면 config·controlq·cursorq가 벡터 0을 공유하고(§4.1.5.1.2 허용), 인터럽트마다 config 이벤트와 두 큐를 모두 확인한다.
+- boot-arg `vvideo_irq=0|1|2`(MSI-X/INTx/Poll). 이 장치에서 1(INTx)을 주면 레거시 소스가 없어 Poll로 내려간다.
+- 서비스 전용 워크루프에서 인터럽트·타이머를 직렬화. INTx 필터는 1차 문맥에서 ISR만 읽고 원인을 원자적으로 쌓는다.
+- 진단 속성: `VVIrqMode`, `VVIrqSharedVector`, `VVInterruptSources`, `VVEventCounters`, 2초마다 `VVGpuEventsReadNow`·`VVMsixControlNow`·`VVPciCommandNow`.
+
+실기 확인 (kext 0.0.14)
+
+| 항목 | 값 |
+| ---- | -- |
+| 방식 | `msix`, 공유 벡터 0, 이벤트 소스 1개 |
+| 큐 벡터 | controlq·cursorq 모두 `vector=0x0`, 장치가 수락(다시 읽기 일치) |
+| MSI-X 제어 (활성 후) | `0x8002` — 활성 비트 켜짐, 테이블 3 |
+| PCI command | `0x0407` — INTx 비활성 비트 켜짐 |
+| 상태 | `0x0F`, 불일치 0 |
+| QEMU 창 크기 변경 후 | `events_read=0`, 인터럽트 0 |
+
+결론
+
+- 인터럽트 설정은 장치·PCI 계층 모두 기대대로다. 실제 인터럽트 수신은 아직 한 번도 일어나지 않았다.
+- QEMU GTK 창 크기 변경으로는 디스플레이 이벤트가 생기지 않았다. virtio-gpu scanout이 아직 없는(VGA 출력 중인) 상태라서일 가능성이 있다 (확인 못 함). config 인터럽트는 scanout이 생기는 P2 이후(WI-3.005)에 다시 본다.
+- controlq 인터럽트와 Poll 방식은 WI-1.007의 첫 `GET_DISPLAY_INFO` 왕복으로 확인한다. 그때 WI-1.005 체크리스트를 닫는다.
+

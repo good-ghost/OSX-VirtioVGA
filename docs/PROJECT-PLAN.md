@@ -112,9 +112,9 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 인덱스 wrap-around를 포함한 링 로직 단위 테스트가 통과한다 (`SplitRingTests`, 70000회 왕복)
   - [X] 큐 크기를 장치가 알려 준 값 이하로 정한다 (`chooseQueueSize`, 장치 최대 1024 → controlq 64, cursorq 16)
 - WI-1.005
-  - [ ] MSI-X 벡터 3개(config, controlq, cursorq)를 배정하고 인터럽트를 받는다
-  - [ ] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다
-  - [ ] 폴링 모드 디버그 옵션에서 인터럽트 없이 동작한다
+  - [ ] MSI-X 벡터 3개(config, controlq, cursorq)를 배정하고 인터럽트를 받는다 — macOS가 이 장치에 MSI-X 소스를 1개만 주어 벡터 0 공유로 구현·설정 확인(MSI-X 활성, 장치가 벡터 수락). 실제 인터럽트 수신은 WI-1.007 첫 명령에서 확인
+  - [ ] MSI-X를 끄는 디버그 옵션에서 INTx + ISR로 동작한다 — 구현했으나 이 장치에는 레거시 인터럽트 소스가 없어(IOPCIMessagedInterruptController만) Poll로 내려간다. 시험 불가
+  - [ ] 폴링 모드 디버그 옵션에서 인터럽트 없이 동작한다 — 구현. WI-1.007 명령 왕복으로 확인
 - WI-1.006
   - [ ] `DEVICE_NEEDS_RESET`을 감지하면 reset 후 재초기화 경로를 탄다 (폴링 모드에서 강제로 시험)
   - [ ] 전송 계층이 GPU 코드와 분리된 클래스로 있다

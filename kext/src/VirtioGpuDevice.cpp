@@ -1,8 +1,12 @@
 #include "VirtioGpuDevice.hpp"
 
+#include <IOKit/IOFilterInterruptEventSource.h>
+#include <IOKit/IOInterruptEventSource.h>
 #include <IOKit/IOTimerEventSource.h>
 #include <IOKit/IOWorkLoop.h>
 #include <IOKit/pci/IOPCIDevice.h>
+#include <libkern/OSAtomic.h>
+#include <pexpert/pexpert.h>
 
 #include "VVBootArgs.hpp"
 #include "VVLog.hpp"
@@ -20,9 +24,16 @@ namespace v = vv::virtio;
 
 // 상태 감시 주기. 외부(Apple 전송 드라이버 등)가 장치를 reset하는지 보기 위한 것이라 촘촘할 필요가 없다.
 constexpr uint32_t kStatusWatchIntervalMs = 2000;
+// Poll 방식의 확인 주기 (디버그용이라 성능보다 단순함을 택했다).
+constexpr uint32_t kPollIntervalMs = 10;
 // 원하는 큐 크기. 장치 최대가 더 작으면 그에 맞춘다. 명령은 한 번에 하나씩 보내므로(REQ-024) 크게 둘 필요가 없다.
-constexpr uint16_t kDesiredControlQueueSize = 64;
-constexpr uint16_t kDesiredCursorQueueSize = 16;
+constexpr uint16_t kDesiredQueueSize[] = {64, 16};  // controlq, cursorq
+constexpr const char *kQueueProperty[] = {"VVControlQueue", "VVCursorQueue"};
+// 인터럽트 소스 목록을 훑을 최대 인덱스 (레거시 1 + MSI-X 테이블 크기보다 넉넉히).
+constexpr int kMaxInterruptSourceIndex = 16;
+constexpr size_t kSummaryBytes = 128;
+
+static_assert(v::gpu::kControlQueue == 0 && v::gpu::kCursorQueue == 1, "mQueues 배열 순서");
 
 uint32_t high32(uint64_t value)
 {
@@ -32,6 +43,13 @@ uint32_t high32(uint64_t value)
 uint32_t low32(uint64_t value)
 {
     return static_cast<uint32_t>(value);
+}
+
+v::IrqMode irqModeFromBootArgs()
+{
+    int value = 0;
+    const bool hasValue = PE_parse_boot_argn(v::kIrqModeBootArg, &value, sizeof(value));
+    return v::irqModeFromBootArg(hasValue, value);
 }
 
 } // namespace
@@ -44,6 +62,11 @@ IOService *VirtioGpuDevice::probe(IOService *provider, SInt32 *score)
     return IOService::probe(provider, score);
 }
 
+IOWorkLoop *VirtioGpuDevice::getWorkLoop() const
+{
+    return mWorkLoop;
+}
+
 bool VirtioGpuDevice::start(IOService *provider)
 {
     if (!IOService::start(provider)) {
@@ -52,23 +75,32 @@ bool VirtioGpuDevice::start(IOService *provider)
     if (!vv::initLog()) {
         setProperty("VVLogInitFailed", true);
     }
-    IOPCIDevice *pci = OSDynamicCast(IOPCIDevice, provider);
-    if (pci == nullptr) {
+    mPci = OSDynamicCast(IOPCIDevice, provider);
+    if (mPci == nullptr) {
         failDevice("provider-not-pci");
         return true;
     }
-    publishPciDiagnostics(pci);
+    mPci->retain();
+    mWorkLoop = IOWorkLoop::workLoop();
+    if (mWorkLoop == nullptr) {
+        failDevice("workloop");
+        return true;
+    }
+    publishPciDiagnostics(mPci);
 
     v::pci::LayoutError layoutError = v::pci::LayoutError::None;
-    mTransport = VirtioPciTransport::withDevice(pci, sizeof(v::gpu::Config), &layoutError);
+    mTransport = VirtioPciTransport::withDevice(mPci, sizeof(v::gpu::Config), &layoutError);
     setProperty("VVLayoutResult", v::pci::layoutErrorName(layoutError));
     if (mTransport == nullptr) {
         failDevice("transport");
         return true;
     }
+    mIrqMode = irqModeFromBootArgs();
     if (initializeDevice()) {
-        startStatusWatch();
+        enableInterrupts();
+        startTimers();
     }
+    publishCounters();
     vv::publishLog(this);
     return true;
 }
@@ -112,6 +144,10 @@ bool VirtioGpuDevice::initializeDevice()
     }
     VV_LOG_INFO("gpu: FEATURES_OK accepted, status=0x%02x", status);
 
+    if (!prepareInterrupts()) {
+        failDevice("interrupts");
+        return false;
+    }
     if (!setupQueues()) {
         failDevice("queues");
         return false;
@@ -126,7 +162,83 @@ bool VirtioGpuDevice::initializeDevice()
     mExpectedStatus = live;
     setProperty("VVInitResult", "driver-ok");
     setProperty("VVDeviceStatus", live, 8);
-    VV_LOG_INFO("gpu: DRIVER_OK, status=0x%02x", live);
+    VV_LOG_INFO("gpu: DRIVER_OK, status=0x%02x irq=%s", live, v::irqModeName(mIrqMode));
+    return true;
+}
+
+void VirtioGpuDevice::findInterruptSources()
+{
+    mMsixSourceCount = 0;
+    mLegacyIndex = kNoSource;
+    for (int index = 0; index < kMaxInterruptSourceIndex; ++index) {
+        int type = 0;
+        if (mPci->getInterruptType(index, &type) != kIOReturnSuccess) {
+            break;
+        }
+        if ((type & kIOInterruptTypePCIMessagedX) != 0) {
+            if (mMsixSourceCount < v::kSeparateMsixVectors) {
+                mMsixIndices[mMsixSourceCount] = index;
+            }
+            ++mMsixSourceCount;
+        } else if ((type & kIOInterruptTypePCIMessaged) == 0 && mLegacyIndex == kNoSource) {
+            mLegacyIndex = index;  // 레벨(또는 에지) 레거시 소스
+        }
+    }
+}
+
+bool VirtioGpuDevice::prepareInterrupts()
+{
+    findInterruptSources();
+    publishInterruptSources();
+    const v::IrqMode requested = mIrqMode;
+    mIrqMode = v::effectiveIrqMode(requested, mMsixSourceCount, mLegacyIndex != kNoSource);
+    VV_LOG_INFO("gpu: irq requested=%s effective=%s (msix sources=%u, legacy index=%d)", v::irqModeName(requested),
+                v::irqModeName(mIrqMode), mMsixSourceCount, mLegacyIndex);
+    if (mIrqMode == v::IrqMode::MsiX && !prepareMsix()) {
+        return false;
+    }
+    if (mIrqMode == v::IrqMode::Intx && !prepareIntx()) {
+        return false;
+    }
+    // MSI-X가 아니면 장치가 ISR/INTx를 쓰도록 config 벡터를 NO_VECTOR로 둔다 (reset 직후 기본값이지만 명시한다).
+    if (!mTransport->setConfigVector(v::configVectorFor(mIrqMode))) {
+        VV_LOG_ERR("gpu: config vector 0x%x not accepted", v::configVectorFor(mIrqMode));
+        return false;
+    }
+    setProperty("VVIrqMode", v::irqModeName(mIrqMode));
+    setProperty("VVIrqSharedVector", mIrqMode == v::IrqMode::MsiX && !v::usesSeparateVectors(mMsixSourceCount));
+    return true;
+}
+
+bool VirtioGpuDevice::prepareMsix()
+{
+    const uint16_t sources = v::usesSeparateVectors(mMsixSourceCount) ? v::kSeparateMsixVectors : 1;
+    for (uint16_t vector = 0; vector < sources; ++vector) {
+        IOInterruptEventSource *source = IOInterruptEventSource::interruptEventSource(
+            this, &VirtioGpuDevice::msixFired, mPci, mMsixIndices[vector]);
+        if (source == nullptr || mWorkLoop->addEventSource(source) != kIOReturnSuccess) {
+            VV_LOG_ERR("gpu: MSI-X source for vector %u (index %d) failed", vector, mMsixIndices[vector]);
+            if (source != nullptr) {
+                source->release();
+            }
+            return false;
+        }
+        mMsixSources[vector] = source;
+    }
+    VV_LOG_INFO("gpu: MSI-X %s, %u event source(s)", sources == 1 ? "shared vector 0" : "separate vectors",
+                sources);
+    return true;
+}
+
+bool VirtioGpuDevice::prepareIntx()
+{
+    // 레거시 라인은 다른 장치와 공유될 수 있으므로 필터에서 ISR로 우리 인터럽트인지 가린다.
+    mIntxSource = IOFilterInterruptEventSource::filterInterruptEventSource(
+        this, &VirtioGpuDevice::intxFired, &VirtioGpuDevice::intxFilter, mPci, mLegacyIndex);
+    if (mIntxSource == nullptr || mWorkLoop->addEventSource(mIntxSource) != kIOReturnSuccess) {
+        VV_LOG_ERR("gpu: INTx source (index %d) failed", mLegacyIndex);
+        return false;
+    }
     return true;
 }
 
@@ -134,42 +246,195 @@ bool VirtioGpuDevice::setupQueues()
 {
     const uint16_t queueCount = mTransport->numQueues();
     setProperty("VVNumQueues", queueCount, 16);
-    if (queueCount <= v::gpu::kCursorQueue) {
-        VV_LOG_ERR("gpu: device has %u queues, need 2", queueCount);
+    if (queueCount < kQueueCount) {
+        VV_LOG_ERR("gpu: device has %u queues, need %u", queueCount, kQueueCount);
         return false;
     }
-    struct Plan {
-        uint16_t index;
-        uint16_t desired;
-        VirtioQueue **slot;
-        const char *property;
-    };
-    const Plan plans[] = {
-        {v::gpu::kControlQueue, kDesiredControlQueueSize, &mControlQueue, "VVControlQueue"},
-        {v::gpu::kCursorQueue, kDesiredCursorQueueSize, &mCursorQueue, "VVCursorQueue"},
-    };
-    for (const Plan &plan : plans) {
-        const uint16_t maxSize = mTransport->queueMaxSize(plan.index);
-        const uint16_t size = v::pci::chooseQueueSize(plan.desired, maxSize);
+    for (uint16_t index = 0; index < kQueueCount; ++index) {
+        const uint16_t maxSize = mTransport->queueMaxSize(index);
+        const uint16_t size = v::pci::chooseQueueSize(kDesiredQueueSize[index], maxSize);
         if (size == 0) {
-            VV_LOG_ERR("gpu: queue %u not available (max %u)", plan.index, maxSize);
+            VV_LOG_ERR("gpu: queue %u not available (max %u)", index, maxSize);
             return false;
         }
-        VirtioQueue *queue = VirtioQueue::withSize(plan.index, size);
-        if (queue == nullptr) {
-            VV_LOG_ERR("gpu: queue %u allocation failed", plan.index);
+        mQueues[index] = VirtioQueue::withSize(index, size);
+        if (mQueues[index] == nullptr) {
+            VV_LOG_ERR("gpu: queue %u allocation failed", index);
             return false;
         }
-        *plan.slot = queue;
-        if (!mTransport->setupQueue(queue)) {
+        const uint16_t vector = v::queueVectorFor(mIrqMode, index, mMsixSourceCount);
+        if (!mTransport->setupQueue(mQueues[index], vector)) {
             return false;
         }
-        char summary[64];
-        snprintf(summary, sizeof(summary), "size=%u max=%u notify=0x%x enabled=%d", size, maxSize,
-                 queue->notifyOffset(), mTransport->isQueueEnabled(plan.index));
-        setProperty(plan.property, summary);
+        char summary[kSummaryBytes];
+        snprintf(summary, sizeof(summary), "size=%u max=%u notify=0x%x vector=0x%x enabled=%d", size, maxSize,
+                 mQueues[index]->notifyOffset(), vector, mTransport->isQueueEnabled(index));
+        setProperty(kQueueProperty[index], summary);
     }
     return true;
+}
+
+void VirtioGpuDevice::enableInterrupts()
+{
+    for (IOInterruptEventSource *source : mMsixSources) {
+        if (source != nullptr) {
+            source->enable();
+        }
+    }
+    if (mIntxSource != nullptr) {
+        mIntxSource->enable();
+    }
+}
+
+void VirtioGpuDevice::releaseInterrupts()
+{
+    for (IOInterruptEventSource *&source : mMsixSources) {
+        if (source != nullptr) {
+            source->disable();
+            mWorkLoop->removeEventSource(source);
+            source->release();
+            source = nullptr;
+        }
+    }
+    if (mIntxSource != nullptr) {
+        mIntxSource->disable();
+        mWorkLoop->removeEventSource(mIntxSource);
+        mIntxSource->release();
+        mIntxSource = nullptr;
+    }
+}
+
+void VirtioGpuDevice::publishInterruptSources()
+{
+    char summary[kSummaryBytes] = {};
+    size_t used = 0;
+    for (int index = 0; index < kMaxInterruptSourceIndex && used + 16 < sizeof(summary); ++index) {
+        int type = 0;
+        if (mPci->getInterruptType(index, &type) != kIOReturnSuccess) {
+            break;
+        }
+        const char *kind = (type & kIOInterruptTypePCIMessagedX) != 0 ? "msix"
+                           : (type & kIOInterruptTypePCIMessaged) != 0 ? "msi"
+                           : (type & kIOInterruptTypeLevel) != 0 ? "level"
+                                                                 : "edge";
+        const int written =
+            snprintf(summary + used, sizeof(summary) - used, "%s%d:%s", used == 0 ? "" : " ", index, kind);
+        if (written <= 0) {
+            break;
+        }
+        used += static_cast<size_t>(written);
+    }
+    setProperty("VVInterruptSources", summary);
+    VV_LOG_INFO("gpu: interrupt sources %s", summary);
+}
+
+void VirtioGpuDevice::handleQueueEvent(unsigned queue)
+{
+    if (queue >= kQueueCount || mQueues[queue] == nullptr) {
+        return;
+    }
+    ++mQueueEvents[queue];
+    v::RingCompletion completion{};
+    for (;;) {
+        const auto result = mQueues[queue]->ring().collect(completion);
+        if (result == v::SplitRing::CollectResult::Empty) {
+            break;
+        }
+        if (result == v::SplitRing::CollectResult::DeviceError) {
+            ++mDeviceErrors;
+            VV_LOG_ERR("gpu: queue %u returned out-of-range used id", queue);
+            break;
+        }
+        ++mCompletions[queue];
+    }
+}
+
+void VirtioGpuDevice::handleConfigEvent()
+{
+    using Gpu = v::gpu::Config;
+    ++mConfigEvents;
+    const uint32_t events = mTransport->deviceRead32(offsetof(Gpu, eventsRead));
+    if (events != 0) {
+        VV_LOG_INFO("gpu: config event 0x%x (display=%d)", events, (events & v::gpu::kEventDisplay) != 0);
+        // §5.7.4: 처리한 비트를 events_clear에 써서 지운다. 디스플레이 정보 재조회는 WI-3.005.
+        mTransport->deviceWrite32(offsetof(Gpu, eventsClear), events);
+        vv::publishLog(this);
+    }
+}
+
+void VirtioGpuDevice::handleSharedEvent()
+{
+    // 공유 벡터는 원인을 알려 주지 않으므로 config 이벤트와 두 큐를 모두 확인한다.
+    using Gpu = v::gpu::Config;
+    if (mTransport->deviceRead32(offsetof(Gpu, eventsRead)) != 0) {
+        handleConfigEvent();
+    }
+    for (unsigned queue = 0; queue < kQueueCount; ++queue) {
+        if (mQueues[queue] != nullptr && mQueues[queue]->ring().pendingCompletions() != 0) {
+            handleQueueEvent(queue);
+        }
+    }
+}
+
+void VirtioGpuDevice::msixFired(OSObject *owner, IOInterruptEventSource *sender, int)
+{
+    auto *self = OSDynamicCast(VirtioGpuDevice, owner);
+    if (self == nullptr || self->mTransport == nullptr) {
+        return;
+    }
+    ++self->mInterrupts;
+    if (!v::usesSeparateVectors(self->mMsixSourceCount)) {
+        self->handleSharedEvent();
+    } else if (sender == self->mMsixSources[v::kConfigVector]) {
+        self->handleConfigEvent();
+    } else if (sender == self->mMsixSources[v::kControlQueueVector]) {
+        self->handleQueueEvent(v::gpu::kControlQueue);
+    } else if (sender == self->mMsixSources[v::kCursorQueueVector]) {
+        self->handleQueueEvent(v::gpu::kCursorQueue);
+    }
+}
+
+bool VirtioGpuDevice::intxFilter(OSObject *owner, IOFilterInterruptEventSource *)
+{
+    // 1차 인터럽트 문맥. 로그·할당·락을 쓰지 않는다. ISR을 읽어(읽으면 지워짐) 우리 것이면 원인을 쌓는다.
+    auto *self = static_cast<VirtioGpuDevice *>(owner);
+    if (self->mTransport == nullptr) {
+        return false;
+    }
+    const uint8_t isr = self->mTransport->readIsr();
+    if (isr == 0) {
+        return false;  // 공유 라인의 다른 장치 인터럽트
+    }
+    OSBitOrAtomic(isr, &self->mIntxPendingIsr);
+    return true;
+}
+
+void VirtioGpuDevice::intxFired(OSObject *owner, IOInterruptEventSource *, int)
+{
+    auto *self = OSDynamicCast(VirtioGpuDevice, owner);
+    if (self == nullptr) {
+        return;
+    }
+    ++self->mInterrupts;
+    const auto isr = static_cast<uint8_t>(OSBitAndAtomic(0, &self->mIntxPendingIsr));
+    if (v::isrHasConfigEvent(isr)) {
+        self->handleConfigEvent();
+    }
+    if (v::isrHasQueueEvent(isr)) {
+        // ISR은 어느 큐인지 알려 주지 않으므로 둘 다 확인한다.
+        self->handleQueueEvent(v::gpu::kControlQueue);
+        self->handleQueueEvent(v::gpu::kCursorQueue);
+    }
+}
+
+void VirtioGpuDevice::pollTimerFired(OSObject *owner, IOTimerEventSource *sender)
+{
+    auto *self = OSDynamicCast(VirtioGpuDevice, owner);
+    if (self == nullptr || self->mTransport == nullptr) {
+        return;
+    }
+    self->handleSharedEvent();
+    sender->setTimeoutMS(kPollIntervalMs);
 }
 
 void VirtioGpuDevice::failDevice(const char *reason)
@@ -186,15 +451,18 @@ void VirtioGpuDevice::failDevice(const char *reason)
 
 void VirtioGpuDevice::releaseDevice()
 {
-    // 장치가 큐 메모리를 더 쓰지 않도록 reset을 먼저 하고, 그 뒤에 큐 메모리를 놓는다.
+    stopTimers();
+    // 장치가 큐 메모리를 더 쓰지 않도록 reset을 먼저 한다. reset 뒤에는 인터럽트도 오지 않는다.
     if (mTransport != nullptr) {
         mTransport->reset();
     }
-    VirtioQueue **queues[] = {&mControlQueue, &mCursorQueue};
-    for (VirtioQueue **queue : queues) {
-        if (*queue != nullptr) {
-            (*queue)->release();
-            *queue = nullptr;
+    if (mWorkLoop != nullptr) {
+        releaseInterrupts();
+    }
+    for (VirtioQueue *&queue : mQueues) {
+        if (queue != nullptr) {
+            queue->release();
+            queue = nullptr;
         }
     }
     if (mTransport != nullptr) {
@@ -215,36 +483,37 @@ void VirtioGpuDevice::publishPciDiagnostics(IOPCIDevice *pci)
     VV_LOG_INFO("gpu: pci cmd=0x%04x msix cap=0x%02x control=0x%04x", command, msix, msixControl);
 }
 
-void VirtioGpuDevice::startStatusWatch()
+void VirtioGpuDevice::startTimers()
 {
-    IOWorkLoop *workLoop = getWorkLoop();
-    if (workLoop == nullptr) {
-        VV_LOG_ERR("gpu: no workloop for status watch");
-        return;
-    }
     mStatusTimer = IOTimerEventSource::timerEventSource(this, &VirtioGpuDevice::statusTimerFired);
-    if (mStatusTimer == nullptr || workLoop->addEventSource(mStatusTimer) != kIOReturnSuccess) {
-        VV_LOG_ERR("gpu: status watch timer setup failed");
-        if (mStatusTimer != nullptr) {
-            mStatusTimer->release();
-            mStatusTimer = nullptr;
-        }
+    if (mStatusTimer == nullptr || mWorkLoop->addEventSource(mStatusTimer) != kIOReturnSuccess) {
+        VV_LOG_ERR("gpu: status timer setup failed");
+    } else {
+        mStatusTimer->setTimeoutMS(kStatusWatchIntervalMs);
+    }
+    if (mIrqMode != v::IrqMode::Poll) {
         return;
     }
-    mStatusTimer->setTimeoutMS(kStatusWatchIntervalMs);
+    mPollTimer = IOTimerEventSource::timerEventSource(this, &VirtioGpuDevice::pollTimerFired);
+    if (mPollTimer == nullptr || mWorkLoop->addEventSource(mPollTimer) != kIOReturnSuccess) {
+        VV_LOG_ERR("gpu: poll timer setup failed");
+        return;
+    }
+    mPollTimer->setTimeoutMS(kPollIntervalMs);
 }
 
-void VirtioGpuDevice::stopStatusWatch()
+void VirtioGpuDevice::stopTimers()
 {
-    if (mStatusTimer == nullptr) {
-        return;
+    IOTimerEventSource **timers[] = {&mStatusTimer, &mPollTimer};
+    for (IOTimerEventSource **timer : timers) {
+        if (*timer == nullptr) {
+            continue;
+        }
+        (*timer)->cancelTimeout();
+        mWorkLoop->removeEventSource(*timer);
+        (*timer)->release();
+        *timer = nullptr;
     }
-    mStatusTimer->cancelTimeout();
-    if (IOWorkLoop *workLoop = getWorkLoop()) {
-        workLoop->removeEventSource(mStatusTimer);
-    }
-    mStatusTimer->release();
-    mStatusTimer = nullptr;
 }
 
 void VirtioGpuDevice::statusTimerFired(OSObject *owner, IOTimerEventSource *sender)
@@ -254,6 +523,7 @@ void VirtioGpuDevice::statusTimerFired(OSObject *owner, IOTimerEventSource *send
         return;
     }
     self->checkStatus();
+    self->publishCounters();
     sender->setTimeoutMS(kStatusWatchIntervalMs);
 }
 
@@ -274,14 +544,44 @@ void VirtioGpuDevice::checkStatus()
     setProperty("VVDeviceStatus", status, 8);
     setProperty("VVStatusChecks", mStatusChecks, 32);
     setProperty("VVStatusMismatches", mStatusMismatches, 32);
+
+    // 인터럽트가 오지 않을 때 원인을 가르기 위한 현재 값 (WI-1.005).
+    // events_read가 남아 있으면 장치는 이벤트를 냈는데 인터럽트가 처리되지 않은 것이다.
+    using Gpu = v::gpu::Config;
+    setProperty("VVGpuEventsReadNow", mTransport->deviceRead32(offsetof(Gpu, eventsRead)), 32);
+    if (mPci != nullptr) {
+        auto read8 = [this](uint8_t offset) { return mPci->configRead8(offset); };
+        const uint8_t msix = vv::pci::findCapability(read8, vv::pci::kCapIdMsix);
+        if (msix != 0) {
+            setProperty("VVMsixControlNow",
+                        mPci->configRead16(static_cast<uint8_t>(msix + vv::pci::kMsixControlOffset)), 16);
+        }
+        setProperty("VVPciCommandNow", mPci->configRead16(kIOPCIConfigCommand), 16);
+    }
+}
+
+void VirtioGpuDevice::publishCounters()
+{
+    char summary[kSummaryBytes];
+    snprintf(summary, sizeof(summary),
+             "interrupts=%u config=%u controlq=%u cursorq=%u completions=%u/%u device-errors=%u", mInterrupts,
+             mConfigEvents, mQueueEvents[0], mQueueEvents[1], mCompletions[0], mCompletions[1], mDeviceErrors);
+    setProperty("VVEventCounters", summary);
 }
 
 void VirtioGpuDevice::stop(IOService *provider)
 {
-    stopStatusWatch();
     // 장치를 다른 드라이버(또는 다음 부팅)가 처음부터 쓸 수 있게 reset해 둔다.
     releaseDevice();
     VV_LOG_INFO("gpu: stop");
     vv::publishLog(this);
+    if (mWorkLoop != nullptr) {
+        mWorkLoop->release();
+        mWorkLoop = nullptr;
+    }
+    if (mPci != nullptr) {
+        mPci->release();
+        mPci = nullptr;
+    }
     IOService::stop(provider);
 }

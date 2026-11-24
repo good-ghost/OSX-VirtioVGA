@@ -154,5 +154,6 @@ VM을 끄고 §1의 `qemu-img snapshot -a`로 되돌린다. EFI 파티션도 같
 
 - boot-args: `keepsyms=1`
 - `Kernel > Add:8` VirtioVideo: `Enabled=true` (WI-0.004에서 다시 켬)
-- EFI의 kext 버전: 0.0.11, UUID `9D7194ED-D35A-3C8E-BA58-B6F89B8B300C` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 reset하고 큐 두 개를 등록한 뒤 DRIVER_OK(0x0F)까지 초기화한다. 명령은 아직 보내지 않으며 화면은 IONDRV가 그린다
+- EFI의 kext 버전: 0.0.14, UUID `2D60698A-5AA8-3E2D-B9E4-7426F47B754E` (dSYM은 `build/dsym-archive/`). `VirtioGpuDevice`가 GPU 장치를 DRIVER_OK(0x0F)까지 초기화하고 MSI-X(공유 벡터 0) 인터럽트 소스를 켠다. 명령은 아직 보내지 않으며 화면은 IONDRV가 그린다
+- boot-arg `vvideo_irq=0|1|2`로 인터럽트 방식을 고를 수 있다 (이 장치에서 1은 Poll로 내려간다)
 - QEMU: `-gdb tcp:127.0.0.1:1234` 사용 중

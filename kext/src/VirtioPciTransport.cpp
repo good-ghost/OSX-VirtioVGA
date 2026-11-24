@@ -271,7 +271,7 @@ uint16_t VirtioPciTransport::queueMaxSize(uint16_t index)
     return commonRead16(offsetof(CommonCfg, queueSize));
 }
 
-bool VirtioPciTransport::setupQueue(VirtioQueue *queue)
+bool VirtioPciTransport::setupQueue(VirtioQueue *queue, uint16_t vector)
 {
     if (queue == nullptr) {
         return false;
@@ -294,8 +294,13 @@ bool VirtioPciTransport::setupQueue(VirtioQueue *queue)
         return false;
     }
     // §4.1.5.1.3: 크기·벡터·주소를 쓰고 마지막에 queue_enable=1.
+    if (!commonWrite16(offsetof(CommonCfg, queueMsixVector), vector) ||
+        commonRead16(offsetof(CommonCfg, queueMsixVector)) != vector) {
+        // §4.1.5.1.2: 장치가 벡터를 쓸 수 없으면 NO_VECTOR를 돌려준다.
+        VV_LOG_ERR("transport: queue %u vector %u not accepted", index, vector);
+        return false;
+    }
     const bool written = commonWrite16(offsetof(CommonCfg, queueSize), queue->size()) &&
-                         commonWrite16(offsetof(CommonCfg, queueMsixVector), vv::virtio::pci::kMsiNoVector) &&
                          commonWrite64(offsetof(CommonCfg, queueDesc), queue->descAddress()) &&
                          commonWrite64(offsetof(CommonCfg, queueDriver), queue->availAddress()) &&
                          commonWrite64(offsetof(CommonCfg, queueDevice), queue->usedAddress()) &&
@@ -305,8 +310,8 @@ bool VirtioPciTransport::setupQueue(VirtioQueue *queue)
         return false;
     }
     queue->setNotifyOffset(notifyOffset);
-    VV_LOG_INFO("transport: queue %u size=%u max=%u notify_off=%u (offset 0x%x)", index, queue->size(), maxSize,
-                notifyOff, notifyOffset);
+    VV_LOG_INFO("transport: queue %u size=%u max=%u notify_off=%u (offset 0x%x) vector=0x%x", index, queue->size(),
+                maxSize, notifyOff, notifyOffset, vector);
     return true;
 }
 
@@ -316,5 +321,21 @@ bool VirtioPciTransport::isQueueEnabled(uint16_t index)
         return false;
     }
     return commonRead16(offsetof(CommonCfg, queueEnable)) == 1;
+}
+
+bool VirtioPciTransport::deviceWrite32(uint32_t offset, uint32_t value)
+{
+    return writeAt<uint32_t>(regionAddress(mLayout.device, offset, sizeof(uint32_t)), value);
+}
+
+uint8_t VirtioPciTransport::readIsr()
+{
+    return readAt<uint8_t>(regionAddress(mLayout.isr, 0, sizeof(uint8_t)), nullptr);
+}
+
+bool VirtioPciTransport::setConfigVector(uint16_t vector)
+{
+    return commonWrite16(offsetof(CommonCfg, configMsixVector), vector) &&
+           commonRead16(offsetof(CommonCfg, configMsixVector)) == vector;
 }
 

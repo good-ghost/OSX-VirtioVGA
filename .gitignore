@@ -1,0 +1,27 @@
+# 빌드 산출물
+build/
+DerivedData/
+*.kext/
+*.dSYM/
+*.o
+*.a
+
+# Xcode 사용자 상태
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# 로컬 설정·비밀
+.env
+*.pem
+*.key
+secrets/
+.claude/settings.local.json
+
+# 대용량 녹화 원본 (정리본만 커밋)
+docs/movie/raw/
+
+# OpenCore config.plist 사본 (SMBIOS 일련번호·MLB·UUID 포함 — 커밋 금지)
+docs/research/efi/

@@ -623,8 +623,19 @@ bool VirtioGpuDevice::allocateFramebuffer(const vv::display::Mode &mode)
         VV_LOG_ERR("gpu: framebuffer mode %ux%u not allowed", mode.width, mode.height);
         return false;
     }
-    const uint64_t bytes = vv::display::framebufferBytes(vv::display::kMaxMode);
+    // WI-3.008: 풀 상한(128 MiB, Q-03)을 실제로 잡는다. IOFramebuffer는 VRAM 범위(getVRAMRange) 길이를
+    // IOFBMemorySize로 보고하므로, 숫자만 덮어쓰지 않고 그만큼의 메모리를 가진다 (0.0.26 실측: 덮어쓴 값이 무시됨).
+    // 연속 할당에 실패하면 최대 모드 크기로 물러선다.
+    uint64_t bytes = vv::display::kFramebufferPoolBytes;
     VVDmaBuffer *buffer = VVDmaBuffer::withLength(static_cast<size_t>(bytes));
+    if (buffer == nullptr || buffer->physicalAddress() == 0) {
+        if (buffer != nullptr) {
+            buffer->release();
+        }
+        VV_LOG_ERR("gpu: %llu-byte contiguous pool unavailable, falling back to max mode size", bytes);
+        bytes = vv::display::framebufferBytes(vv::display::kMaxMode);
+        buffer = VVDmaBuffer::withLength(static_cast<size_t>(bytes));
+    }
     char summary[kSummaryBytes];
     if (buffer == nullptr) {
         snprintf(summary, sizeof(summary), "%ux%u alloc-failed", mode.width, mode.height);

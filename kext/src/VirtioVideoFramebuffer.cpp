@@ -131,10 +131,6 @@ bool VirtioVideoFramebuffer::start(IOService *provider)
         return false;  // free()가 정리한다
     }
     trace("start-done");
-    // VRAM 보고 (WI-3.008, REQ-060, Q-03): 프레임버퍼 메모리 풀 상한 128 MiB를 보고한다.
-    // 실제로 잡아 둔 물리 메모리는 최대 모드 버퍼 하나(약 16 MB)다. IOFramebuffer::start는 VRAM 범위 길이로
-    // IOFBMemorySize를 정하므로 그 뒤에 덮어쓴다. system_profiler의 "VRAM (Total)"이 이 값을 따르는지 실측한다.
-    setProperty("IOFBMemorySize", vv::display::kFramebufferPoolBytes, 64);
     mGpu->framebufferAttached(this, true);
     VV_LOG_INFO("fb: started %ux%u", mMode.width, mMode.height);
     vv::publishLog(mGpu);
@@ -205,7 +201,7 @@ IODeviceMemory *VirtioVideoFramebuffer::getApertureRange(IOPixelAperture apertur
 
 IODeviceMemory *VirtioVideoFramebuffer::getVRAMRange()
 {
-    // VRAM 128 MiB 보고(REQ-060)는 P3(WI-3.008). 지금은 프레임버퍼 크기.
+    // VRAM = 프레임버퍼 메모리 풀 전체 (WI-3.008, REQ-060). 풀을 128 MiB로 잡으면 그대로 IOFBMemorySize가 된다.
     return makeApertureRange();
 }
 

@@ -149,3 +149,10 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 해석: 언로드는 먼저 우리 서비스를 terminate한다. 사용 중인 프레임버퍼를 terminate하면 Apple 쪽 프레임버퍼 클라이언트가 종료 알림을 처리하다 실패한다는 것을 2026-11-24 IONDRV 실험에서 이미 봤다(`AppleUpstreamUserClientDriver::fbNotificationOccurred` NULL 참조, PHASE-PLAN-02). 같은 경로로 보이지만 이번 보고서가 없어 확정하지 못했다.
 
 결론: **화면을 맡고 있는 동안의 언로드·재로드는 지원할 수 없다.** NFR-003을 "kext 교체는 재부팅으로 한다(`kmutil load -z -p` 후 재부팅)"로 바꿨다(사용자 승인 "Change to reboot", REQUIREMENT v1.3). `-vvideooff` 상태의 언로드는 시험하지 않았다.
+
+### WI-5.009 설치·운영 문서와 라이선스 (2026-11-25)
+
+- `docs/INSTALL.md`를 다시 썼다. 예전 본문(OpenCore 주입 설치)은 T-04 이후 쓰지 않으므로 뺐고, 보조 kernel collection 설치(`kmutil load -z -p` 후 재부팅)를 본 절차로 올렸다. 처음 한 번 하는 OpenCore 설정(SIP 0x201, NVRAM Delete, 보조 kext 항목), 설치 확인(`vvstat`), boot-args 12개 표, Info.plist 기본값(`VVCursorScale`·`VVDirtyFlush`·`VVDirtyTile`), 끄기·빼기, 복구, 알려진 제약(언로드 불가, 시스템 잠자기, Metal), 백업 목록을 담았다. 본 kext 빼기(`kmutil rebuild`)와 `trigger-panic-medic`은 실행해 보지 않았다고 적었다.
+- `docs/DEBUGGING.md`: 대상 문구를 보조 KC로 고치고 §1에 `vvstat` 출력 해석표를 넣었다. 개발 중 난 패닉 3건(넘겨받기 2건은 `panic-summary.py`로 `runTakeover()` 확인, 언로드 1건은 보고서 없음)을 §2.4에 정리했다.
+- `README.md`: 기능, 대상 환경, 빠른 시작, 문서 링크, 상태를 지금 기준으로 고쳤다.
+- `LICENSE`: MIT, `Copyright (c) 2026 good-ghost` (Q-10, 저작권자는 사용자 지정).

@@ -1,26 +1,47 @@
 # 디버깅 절차
 
-대상: OSX-KVM 게스트 macOS 15.8.3 (빌드 `24H241`, x86_64), OpenCore로 주입한 `VirtioVideo.kext`.
+대상: OSX-KVM 게스트 macOS 15.8.3 (빌드 `24H241`, x86_64), 보조 kernel collection으로 로드한 `VirtioVideo.kext`와 OpenCore로 주입한 `VirtioVideoNdrvBlocker.kext`. 2026-11-25 기준(WI-5.009).
 설치·끄기·롤백은 [INSTALL.md](INSTALL.md)를 본다.
 
 | 상황 | 쓸 방법 | 상태 |
 | ---- | ------- | ---- |
-| 드라이버 동작 확인 | §1 드라이버 로그(`VVLog`) | 확인됨 (WI-0.005) |
+| 드라이버 동작 확인 | §1 `scripts/vvstat.sh`, 드라이버 로그(`VVLog`) | 확인됨 (WI-0.005, WI-5.008) |
 | 커널 패닉 | §2 패닉 보고서 + `scripts/panic-summary.py` | 확인됨 (합성 보고서로) |
 | 멈추거나 상태를 직접 봐야 할 때 | §3 QEMU gdbstub + lldb (호스트에서) | kext 심볼·메모리 읽기 확인. 커널 심볼 불가, 중단점 미확인 |
 | Apple 코드 동작 확인 (IONDRV, IOFramebuffer) | §3.5 KDK 심볼로 정적 조회 (게스트에서) | 확인됨 |
 
-## 1. 드라이버 로그
+## 1. 드라이버 상태와 로그
 
-OpenCore로 주입한 kext의 `IOLog`/`os_log`는 통합 로그와 `dmesg`에 남지 않는다 (WI-0.005 실측). 드라이버는 로그를 내부 링 버퍼(128줄)에 쌓고 IORegistry 속성 `VVLog`로 공개한다.
+### 1.1 상태 조회 도구
 
 ```bash
-ioreg -r -c VirtioVideoProbe -l -w0 -d1 | grep '"VV'
+scripts/vvstat.sh --log 20
 ```
 
-클래스 이름은 `kext/Info.plist`의 `IOClass`다. `scripts/collect-env.sh`가 모든 클래스의 `VV*` 속성을 함께 모은다.
+IORegistry 속성만 읽는다(root 불필요). 종료 코드 0이면 `driver-ok`이고 프레임버퍼가 붙어 있다. `--all`은 `VV*` 속성 전체를 보인다.
 
-- 수준: OpenCore config의 boot-args에 `vvideo_log=0|1|2` (0 오류, 1 정보 — 기본, 2 디버그). [INSTALL.md §4.1](INSTALL.md)
+| 줄 | 속성 | 정상 예 | 볼 것 |
+| -- | ---- | ------- | ----- |
+| `init` | `VVInitResult` | `driver-ok` | 다른 값이면 초기화 실패 단계 이름(예: `transport`, `interrupts`, `recovery-limit`) |
+| `mode` | `VVCurrentMode` | `2560x1600 changes=1` | 해상도와 전환 횟수 |
+| `scanout` | `VVScanout` | `running … flush-errors=0 blanks=0` | `flush-errors`가 늘면 전송 실패(resource를 다시 만든다). `blanks`는 디스플레이 잠자기 횟수 |
+| `display power` | `VVDisplayPower` | `on sleeps=N wakes=N` | 잠자기·깨우기 횟수가 같아야 한다. 한 번도 안 잤으면 `-` |
+| `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=50` | `drops`(인터럽트 문맥 등으로 버린 이동), `rejects`(64×64 초과 이미지) |
+| `dirty flush` | `VVDirtyStats` | `on=0 …` | 변경 감지 전송 통계 (기본 꺼짐) |
+| `edid` | `VVEdid` | `ok size=1024` | `invalid:…`이면 장치가 준 EDID를 거절 |
+| `events` | `VVEventCounters` | `… device-errors=0 … timeouts=0 errors=1 recoveries=0` | `errors=1`은 부팅 때 자체 시험이 일부러 만든 오류다. `timeouts`·`device-errors`·`recoveries`가 늘면 장치 문제 |
+
+### 1.2 드라이버 로그
+
+보조 kernel collection·OpenCore로 로드한 kext의 `IOLog`/`os_log`는 통합 로그와 `dmesg`에 남지 않는다 (WI-0.005 실측). 드라이버는 로그를 내부 링 버퍼(128줄)에 쌓고 IORegistry 속성 `VVLog`로 공개한다. `vvstat --log N`으로 보거나 직접 읽는다.
+
+```bash
+ioreg -r -c VirtioGpuDevice -l -w0 | grep '"VV'
+```
+
+- 클래스: `VirtioGpuDevice`(장치·전송·커서), `VirtioVideoFramebuffer`(`VVFbTrace` IOGraphics 호출 순서, `VVFbPowerTrace` 전원·연결 속성 최근 24개), `VirtioVideoProbe`. `VirtioGpuDevice`는 `registerService`를 하지 않으므로 `IOServiceGetMatchingService`로는 찾을 수 없다(`vvstat`은 레지스트리를 돌며 찾는다).
+- 수준: boot-args `vvideo_log=0|1|2` (0 오류, 1 정보 — 기본, 2 디버그). [INSTALL.md §5.1](INSTALL.md)
+- 재부팅하면 로그가 사라진다. 시스템이 멈춰 강제로 끄면 그 직전 상태를 볼 수 없으므로(WI-4.003, WI-5.003), 재현할 때는 다른 기기에서 Remote Control로 미리 `vvstat`을 읽거나 `scripts/soak-snapshot.sh`로 기록해 둔다.
 - 시스템 로그를 볼 때는 `/usr/bin/log show ...`를 쓴다. zsh에서 `log`는 내장 명령이라 조용히 실패한다.
 
 ## 2. 커널 패닉
@@ -48,14 +69,22 @@ python3 -I scripts/panic-summary.py
 
 - `scripts/build.sh`가 `build/VirtioVideo.kext.dSYM`을 만들고, `build/dsym-archive/<UUID>.dSYM`에도 보관한다.
 - **빌드할 때마다 UUID가 바뀐다** (디버그 맵에 오브젝트 파일 시각이 들어가기 때문으로 보인다). 그래서 패닉 보고서의 UUID와 같은 dSYM이 필요하고, `panic-summary.py`는 현재 dSYM이 맞지 않으면 보관소에서 UUID로 찾는다.
-- EFI에 설치한 빌드의 dSYM이 보관소에 있어야 한다. `build/`를 지우면 보관소도 사라진다.
+- 설치한 빌드의 dSYM이 보관소에 있어야 한다. `build/`를 지우면 보관소도 사라진다.
 - 손으로 바꿀 때:
 
   ```bash
   atos -o build/dsym-archive/<UUID>.dSYM/Contents/Resources/DWARF/VirtioVideo -arch x86_64 -l <kext 시작 주소> <주소> ...
   ```
 
-### 2.4 이 VM에 이미 있던 패닉 (이 프로젝트와 무관)
+### 2.4 개발 중 난 패닉 (이 프로젝트)
+
+| 보고서 | 원인 | 처리 |
+| ------ | ---- | ---- |
+| `Kernel-2026-11-24-052540.panic` | 실행 중 IONDRV `terminate()` → `AppleUpstreamUserClientDriver::fbNotificationOccurred` NULL 참조 | 실행 중 넘겨받기를 버리고 부팅 때 보조 kext로 IONDRV를 막는 방식으로 바꿈(PHASE-PLAN-02). `vvideo_takeover=1`은 시험용으로만 남김 |
+| `Kernel-2026-11-24-054128.panic` | 같은 넘겨받기 시험 | 같음 |
+| (보고서 없음) 2026-11-25 01:49 | 화면 사용 중 `kmutil unload` → 패닉 상태로 멈춤, 강제 종료 | NFR-003을 재부팅 교체로 변경(WI-5.003) |
+
+### 2.5 이 VM에 이미 있던 패닉 (이 프로젝트와 무관)
 
 2026-11-19, 11-22, 11-23 18:53에 `Kernel-*.panic`이 있다. 모두 드라이버 설치 전이고 당시 OS는 macOS 15.7.9 (24G830)이다. 패닉 문자열은 `mp_kdp_enter() timed-out` → `NMIPI for spinlock acquisition timeout`, 백트레이스는 `xcpm_*`(CPU 전원 관리)이다. 원인은 조사하지 않았다. 드라이버 시험 중 같은 패닉이 나면 이 드라이버 때문이 아닐 수 있으므로 위 형태와 비교한다.
 

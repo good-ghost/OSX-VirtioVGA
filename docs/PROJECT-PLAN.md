@@ -158,11 +158,11 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] `ioreg`에서 이 드라이버가 붙고 `IONDRVFramebuffer`는 없다 (AC-01)
   - [X] 선택한 probe score와 근거를 기록했다 (점수 30000. 단 실제 대체는 점수가 아니라 보조 kext의 AAPL,iokit-ignore-ndrv로 이뤄짐, PHASE-PLAN-02)
 - WI-2.007
-  - [ ] 기본 60 Hz로 transfer + flush가 돈다, 주기는 설정으로 바뀐다 (60 Hz 동작 확인: flush-errors 0. 주기 설정은 아직 상수)
-  - [ ] 창 이동·타이핑이 화면에 반영된다 (녹화)
+  - [X] 기본 60 Hz로 transfer + flush가 돈다, 주기는 설정으로 바뀐다 (0.0.24: boot-arg `vvideo_flush_ms`, `VVFlushIntervalMs=16`, flush-errors 0)
+  - [ ] 창 이동·타이핑이 화면에 반영된다 (녹화) — 사용자 육안 확인과 캡처만 있음. 게스트 `screencapture -V`는 capture error, 호스트 녹화 필요
 - WI-2.008
-  - [ ] 디버그 옵션으로 초기화 각 단계 실패를 주입해도 부팅이 계속되고 `IONDRVFramebuffer`가 남는다 (AC-06)
-  - [ ] boot-arg `-vvideooff`로 기존 화면으로 부팅된다 (AC-05)
+  - [ ] 디버그 옵션으로 초기화 각 단계 실패를 주입해도 부팅이 계속되고 `IONDRVFramebuffer`가 남는다 (AC-06) — `vvideo_fail=2`(장치 초기화) 통과(0.0.24, 0.0.25 재시험). 1(전송 계층)·3(프레임버퍼)은 아직
+  - [X] boot-arg `-vvideooff`로 기존 화면으로 부팅된다 (AC-05) — 0.0.25: 보조 kext `skipped:-vvideooff`, 본 kext 서비스 0개, IONDRV
 - WI-2.009
   - [ ] 드라이버가 화면을 넘겨받을 때 Apple 로고·진행 막대가 끊기지 않거나, 끊김이 1회 이내임을 녹화로 확인했다
 - WI-2.010

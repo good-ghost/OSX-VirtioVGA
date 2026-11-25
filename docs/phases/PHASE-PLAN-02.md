@@ -326,6 +326,19 @@ personality 초안:
 - 화면 갱신(창 이동·타이핑)의 녹화(WI-2.007), 실패 경로(WI-2.008), 부트 화면 이어받기(WI-2.009)는 남음.
 - 실행 중 넘겨받기 코드(`vvideo_takeover`)는 패닉 위험 때문에 쓰지 않는다.
 
+### WI-2.007·2.008·2.009 실기 (2026-11-24, kext 0.0.24·0.0.25, NdrvBlocker 0.0.1·0.0.2)
+
+| 시험 | 결과 |
+| ---- | ---- |
+| 일반 부팅 (0.0.24) | `VVBootScreenCopy = "copied boot=1280x800@32 rowBytes=5120"`(WI-2.009), `VVFlushIntervalMs = 16`(WI-2.007), flushes 6076·오류 0, 새 패닉 없음 |
+| 화면 녹화 | 게스트 `screencapture -V 10`은 `capture error The operation could not be completed`. 대신 계산기 창 캡처(`docs/screenshots/p2/2026-11-24-wi2007-calculator-open.png`). 호스트 QEMU 창 녹화는 아직 |
+| `vvideo_fail=2` (0.0.24) | `VVInitResult = injected:bring-up`, IONDRV가 화면을 맡음(AC-06). **그러나 재매칭에서 보조 kext가 다시 probe되어 `AAPL,iokit-ignore-ndrv`를 다시 붙임**(`VVNdrvBlocked` restored→set). 이번엔 IONDRV가 먼저 붙었지만 순서에 따라 화면 드라이버가 없을 수 있는 경쟁 조건 |
+| 수정 (0.0.25, NdrvBlocker 0.0.2) | 본 kext가 `VVNdrvHandedBack` 표시를 먼저 남기고, 보조 kext는 표시가 있으면 다시 막지 않음 |
+| `vvideo_fail=2` 재시험 | `VVNdrvHandedBack = Yes`, `VVNdrvBlocked = "restored:injected:bring-up"`, 차단 속성 없음, IONDRV 화면 |
+| `-vvideooff` (AC-05) | 보조 kext `VVNdrvBlocked = "skipped:-vvideooff"`, `ioclasscount` VirtioGpuDevice·VirtioVideoFramebuffer 0, IONDRV 화면 |
+
+남은 것: 실패 주입 1·3단계, 창 이동 녹화(호스트), 부팅 중 화면 끊김 육안 확인(WI-2.009), WI-2.010.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

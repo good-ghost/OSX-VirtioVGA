@@ -617,12 +617,13 @@ void VirtioGpuDevice::pollTimerFired(OSObject *owner, IOTimerEventSource *sender
 
 bool VirtioGpuDevice::allocateFramebuffer(const vv::display::Mode &mode)
 {
-    // WI-2.003: 현재 모드 크기의 물리 연속 버퍼. resource에 붙이는 것(ATTACH_BACKING)은 WI-2.004.
-    if (!vv::display::isUsable(mode) || !vv::display::fitsInPool(mode)) {
+    // WI-2.003, WI-3.002: 최대 모드(2560×1600) 크기의 물리 연속 버퍼 하나를 잡고, 현재 모드는 그 앞부분을 쓴다.
+    // 실행 중 모드 전환에서 큰 연속 메모리를 다시 할당하다 단편화로 실패하는 것을 피하기 위해서다 (T-01 남은 위험).
+    if (!vv::display::isUsable(mode) || !vv::display::fitsInPool(vv::display::kMaxMode)) {
         VV_LOG_ERR("gpu: framebuffer mode %ux%u not allowed", mode.width, mode.height);
         return false;
     }
-    const uint64_t bytes = vv::display::framebufferBytes(mode);
+    const uint64_t bytes = vv::display::framebufferBytes(vv::display::kMaxMode);
     VVDmaBuffer *buffer = VVDmaBuffer::withLength(static_cast<size_t>(bytes));
     char summary[kSummaryBytes];
     if (buffer == nullptr) {

@@ -15,6 +15,7 @@
 #include <IOKit/graphics/IOFramebuffer.h>
 
 #include "vv/DisplayMode.hpp"
+#include "vv/ModeTable.hpp"
 
 class VirtioGpuDevice;
 class VVDmaBuffer;
@@ -60,6 +61,9 @@ private:
 
     VirtioGpuDevice *mGpu = nullptr;       // retain
     VVDmaBuffer *mBuffer = nullptr;        // retain: GPU 서비스가 먼저 멈춰도 aperture가 해제된 메모리를 가리키지 않게
-    vv::display::Mode mMode{};
+    vv::display::Mode mMode{};             // 현재 모드
+    vv::display::ModeTable mModes{};       // 보고하는 모드 목록 (WI-3.001)
+    IODisplayModeID mCurrentModeId = 0;
+    IODisplayModeID mStartupModeId = 0;    // 장치 선호 해상도의 모드
     bool mScanoutStarted = false;
 };

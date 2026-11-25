@@ -13,10 +13,8 @@ OSDefineMetaClassAndStructors(VirtioVideoFramebuffer, IOFramebuffer)
 namespace {
 // 이 boot-arg가 있어야 매칭한다 (VirtioGpuDeviceTakeover.cpp와 같은 값).
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
-// 모드는 하나뿐이다 (P3에서 목록으로 바꾼다). 0은 IOGraphics에서 "모드 없음"으로 쓰일 수 있어 1부터 쓴다.
-constexpr IODisplayModeID kOnlyModeId = 1;
+// 깊이(색 형식)는 32bpp 하나뿐이다. 모드 ID는 vv/ModeTable.hpp가 정한다(1부터, 재부팅 간 고정).
 constexpr IOIndex kOnlyDepth = 0;
-constexpr IOItemCount kModeCount = 1;
 // 60 Hz, 16.16 고정소수점.
 constexpr IOFixed1616 kRefreshRate = 60 << 16;
 constexpr UInt32 kBitsPerPixel = 32;
@@ -120,11 +118,23 @@ bool VirtioVideoFramebuffer::start(IOService *provider)
         mGpu = nullptr;
         return false;
     }
+    // WI-3.001·3.004: 표준 모드 + 장치 선호 해상도. 모두 같은 버퍼의 앞부분을 쓰므로 버퍼에 들어가는 것만 보고한다.
+    mModes = vv::display::buildModeTable(mGpu->preferredMode(), mBuffer->length());
+    const vv::display::ModeEntry *startup = vv::display::findPreferredMode(mModes);
+    if (startup == nullptr || mGpu->changeMode(startup->mode) != kIOReturnSuccess) {
+        return false;  // free()가 정리한다
+    }
+    mMode = startup->mode;
+    mStartupModeId = mCurrentModeId = static_cast<IODisplayModeID>(startup->id);
     trace("start");
     if (!IOFramebuffer::start(provider)) {
         return false;  // free()가 정리한다
     }
     trace("start-done");
+    // VRAM 보고 (WI-3.008, REQ-060, Q-03): 프레임버퍼 메모리 풀 상한 128 MiB를 보고한다.
+    // 실제로 잡아 둔 물리 메모리는 최대 모드 버퍼 하나(약 16 MB)다. IOFramebuffer::start는 VRAM 범위 길이로
+    // IOFBMemorySize를 정하므로 그 뒤에 덮어쓴다. system_profiler의 "VRAM (Total)"이 이 값을 따르는지 실측한다.
+    setProperty("IOFBMemorySize", vv::display::kFramebufferPoolBytes, 64);
     mGpu->framebufferAttached(this, true);
     VV_LOG_INFO("fb: started %ux%u", mMode.width, mMode.height);
     vv::publishLog(mGpu);
@@ -208,7 +218,7 @@ const char *VirtioVideoFramebuffer::getPixelFormats()
 
 IOItemCount VirtioVideoFramebuffer::getDisplayModeCount()
 {
-    return kModeCount;
+    return static_cast<IOItemCount>(mModes.count);
 }
 
 IOReturn VirtioVideoFramebuffer::getDisplayModes(IODisplayModeID *allDisplayModes)
@@ -216,22 +226,25 @@ IOReturn VirtioVideoFramebuffer::getDisplayModes(IODisplayModeID *allDisplayMode
     if (allDisplayModes == nullptr) {
         return kIOReturnBadArgument;
     }
-    allDisplayModes[0] = kOnlyModeId;
+    for (size_t i = 0; i < mModes.count; ++i) {
+        allDisplayModes[i] = static_cast<IODisplayModeID>(mModes.entries[i].id);
+    }
     return kIOReturnSuccess;
 }
 
 IOReturn VirtioVideoFramebuffer::getInformationForDisplayMode(IODisplayModeID displayMode,
                                                               IODisplayModeInformation *info)
 {
-    if (info == nullptr || displayMode != kOnlyModeId) {
+    const vv::display::ModeEntry *entry = vv::display::findModeById(mModes, static_cast<uint32_t>(displayMode));
+    if (info == nullptr || entry == nullptr) {
         return kIOReturnBadArgument;
     }
     bzero(info, sizeof(*info));
-    info->nominalWidth = mMode.width;
-    info->nominalHeight = mMode.height;
+    info->nominalWidth = entry->mode.width;
+    info->nominalHeight = entry->mode.height;
     info->refreshRate = kRefreshRate;
     info->maxDepthIndex = kOnlyDepth;
-    info->flags = kDisplayModeValidFlag | kDisplayModeSafeFlag | kDisplayModeDefaultFlag;
+    info->flags = kDisplayModeValidFlag | kDisplayModeSafeFlag | (entry->preferred ? kDisplayModeDefaultFlag : 0);
     return kIOReturnSuccess;
 }
 
@@ -244,11 +257,13 @@ UInt64 VirtioVideoFramebuffer::getPixelFormatsForDisplayMode(IODisplayModeID, IO
 IOReturn VirtioVideoFramebuffer::getPixelInformation(IODisplayModeID displayMode, IOIndex depth,
                                                      IOPixelAperture aperture, IOPixelInformation *pixelInfo)
 {
-    if (pixelInfo == nullptr || displayMode != kOnlyModeId || depth != kOnlyDepth || aperture != kIOFBSystemAperture) {
+    const vv::display::ModeEntry *entry = vv::display::findModeById(mModes, static_cast<uint32_t>(displayMode));
+    if (pixelInfo == nullptr || entry == nullptr || depth != kOnlyDepth || aperture != kIOFBSystemAperture) {
         return kIOReturnBadArgument;
     }
+    const vv::display::Mode mode = entry->mode;
     bzero(pixelInfo, sizeof(*pixelInfo));
-    pixelInfo->bytesPerRow = vv::display::rowBytes(mMode);
+    pixelInfo->bytesPerRow = vv::display::rowBytes(mode);
     pixelInfo->bytesPerPlane = 0;
     pixelInfo->bitsPerPixel = kBitsPerPixel;
     pixelInfo->pixelType = kIORGBDirectPixels;
@@ -258,15 +273,15 @@ IOReturn VirtioVideoFramebuffer::getPixelInformation(IODisplayModeID displayMode
     pixelInfo->componentMasks[1] = kGreenMask;
     pixelInfo->componentMasks[2] = kBlueMask;
     strlcpy(pixelInfo->pixelFormat, IO32BitDirectPixels, sizeof(pixelInfo->pixelFormat));
-    pixelInfo->activeWidth = mMode.width;
-    pixelInfo->activeHeight = mMode.height;
+    pixelInfo->activeWidth = mode.width;
+    pixelInfo->activeHeight = mode.height;
     return kIOReturnSuccess;
 }
 
 IOReturn VirtioVideoFramebuffer::getCurrentDisplayMode(IODisplayModeID *displayMode, IOIndex *depth)
 {
     if (displayMode != nullptr) {
-        *displayMode = kOnlyModeId;
+        *displayMode = mCurrentModeId;
     }
     if (depth != nullptr) {
         *depth = kOnlyDepth;
@@ -277,13 +292,32 @@ IOReturn VirtioVideoFramebuffer::getCurrentDisplayMode(IODisplayModeID *displayM
 IOReturn VirtioVideoFramebuffer::setDisplayMode(IODisplayModeID displayMode, IOIndex depth)
 {
     trace("setDisplayMode", 0, static_cast<uint64_t>(displayMode));
-    // 모드 전환은 WI-3.002. 지금은 하나뿐인 모드만 받는다.
-    return displayMode == kOnlyModeId && depth == kOnlyDepth ? kIOReturnSuccess : kIOReturnUnsupported;
+    // WI-3.002: 같은 버퍼 안에서 새 크기의 resource로 바꾼다 (VirtioGpuDevice::changeMode).
+    const vv::display::ModeEntry *entry = vv::display::findModeById(mModes, static_cast<uint32_t>(displayMode));
+    if (entry == nullptr || depth != kOnlyDepth || mGpu == nullptr) {
+        return kIOReturnUnsupported;
+    }
+    const IOReturn result = mGpu->changeMode(entry->mode);
+    if (result == kIOReturnSuccess) {
+        mMode = entry->mode;
+        mCurrentModeId = displayMode;
+    }
+    VV_LOG_INFO("fb: setDisplayMode %d (%ux%u) -> 0x%x", static_cast<int>(displayMode), entry->mode.width,
+                entry->mode.height, result);
+    vv::publishLog(mGpu);
+    return result;
 }
 
 IOReturn VirtioVideoFramebuffer::getStartupDisplayMode(IODisplayModeID *displayMode, IOIndex *depth)
 {
-    return getCurrentDisplayMode(displayMode, depth);
+    // 장치 선호 해상도. 마지막 선택 모드 복원(WI-3.007)은 macOS가 저장한 값을 쓰는지 먼저 실측한다.
+    if (displayMode != nullptr) {
+        *displayMode = mStartupModeId;
+    }
+    if (depth != nullptr) {
+        *depth = kOnlyDepth;
+    }
+    return kIOReturnSuccess;
 }
 
 IOReturn VirtioVideoFramebuffer::setGammaTable(UInt32, UInt32, UInt32, void *)

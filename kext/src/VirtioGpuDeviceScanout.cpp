@@ -152,7 +152,10 @@ IOReturn VirtioGpuDevice::startScanout()
         return kIOReturnSuccess;
     }
     mScanoutRequested = true;
-    copyBootScreen();
+    if (!mBootScreenCopied) {
+        copyBootScreen();
+        mBootScreenCopied = true;
+    }
     if (!setUpScanoutResource()) {
         // 루프가 kResourceRetryMs 간격으로 다시 시도한다.
         VV_LOG_ERR("gpu: initial scanout setup failed, will retry");
@@ -179,6 +182,50 @@ void VirtioGpuDevice::stopScanout()
     publishScanout("stopped");
     VV_LOG_INFO("gpu: scanout stopped");
     vv::publishLog(this);
+}
+
+IOReturn VirtioGpuDevice::changeMode(const vv::display::Mode &mode)
+{
+    if (!isReadyForFramebuffer()) {
+        return kIOReturnNotReady;
+    }
+    if (!vv::display::isUsable(mode) || vv::display::framebufferBytes(mode) > mFramebuffer->length()) {
+        return kIOReturnBadArgument;
+    }
+    if (mode == mFramebufferMode) {
+        return kIOReturnSuccess;
+    }
+    const vv::display::Mode previous = mFramebufferMode;
+    const bool wasRunning = mScanoutRequested;
+    if (wasRunning) {
+        // 전송 루프를 멈추고 기존 resource를 정리한다. scanout은 끄지 않는다(새 resource로 바로 바꾼다).
+        mScanoutRequested = false;
+        for (uint32_t waited = 0; mFlushLoopRunning && waited < kFlushLoopDrainMs; waited += kDrainPollMs) {
+            IOSleep(kDrainPollMs);
+        }
+        tearDownScanoutResource(false);
+    }
+    mFramebufferMode = mode;
+    // 새 크기만큼 검게 지운다 (이전 모드의 줄 간격으로 남은 내용이 어긋나 보이지 않게).
+    bzero(mFramebuffer->cpuAddress(), static_cast<size_t>(vv::display::framebufferBytes(mode)));
+    ++mModeChanges;
+    char summary[kSummaryBytes];
+    snprintf(summary, sizeof(summary), "%ux%u changes=%u", mode.width, mode.height, mModeChanges);
+    setProperty("VVCurrentMode", summary);
+    VV_LOG_INFO("gpu: mode %ux%u -> %ux%u", previous.width, previous.height, mode.width, mode.height);
+    if (!wasRunning) {
+        vv::publishLog(this);
+        return kIOReturnSuccess;
+    }
+    mScanoutRequested = true;
+    if (!setUpScanoutResource()) {
+        VV_LOG_ERR("gpu: scanout setup after mode change failed, will retry");
+    }
+    publishScanout("running");
+    vv::publishLog(this);
+    mFlushLoopRunning = true;
+    thread_call_enter(mFlushCall);
+    return kIOReturnSuccess;
 }
 
 void VirtioGpuDevice::deferredFlushLoop(thread_call_param_t owner, thread_call_param_t)

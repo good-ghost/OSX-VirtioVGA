@@ -63,6 +63,11 @@ public:
     IOReturn startScanout();
     // 주기 전송을 멈추고 scanout을 끈 뒤 resource를 정리한다. 워크루프 밖에서 부른다.
     void stopScanout();
+    // 해상도를 바꾼다 (WI-3.002, REQ-034). 프레임버퍼는 최대 모드 크기로 한 번 잡아 두고 모든 모드가 앞부분을 쓴다
+    // (실행 중 물리 연속 재할당을 피하기 위해, T-01). scanout 중이면 전송을 멈추고 새 크기의 resource로 바꾼 뒤 다시 시작한다.
+    IOReturn changeMode(const vv::display::Mode &mode);
+    // 장치가 알려 준 선호 해상도 (WI-3.004).
+    vv::display::Mode preferredMode() const { return mPreferredMode; }
     // 프레임버퍼 클래스가 붙거나(attached=true) 떨어질 때 알린다 (takeover 확인용).
     void framebufferAttached(IOService *framebuffer, bool attached);
 
@@ -199,6 +204,8 @@ private:
     volatile bool mFlushLoopRunning = false;
     uint32_t mScanoutResourceId = 0;  // 0이면 아직 연결 안 됨 (또는 장치 reset으로 잃음)
     uint32_t mFlushIntervalMs = 0;  // start에서 boot-arg로 정한다 (WI-2.007)
+    uint32_t mModeChanges = 0;
+    bool mBootScreenCopied = false;  // 부트 화면은 첫 scanout에서 한 번만 복사한다
     uint32_t mFlushes = 0;
     uint32_t mFlushErrors = 0;
     uint32_t mScanoutSetups = 0;

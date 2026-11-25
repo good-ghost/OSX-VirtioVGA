@@ -177,10 +177,10 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-3.003  | EDID 협상·검증·제공                                 | 2       |
 | [X]    | WI-3.004  | 선호 해상도·EDID 모드 병합                          | 1       |
 | [ ]    | WI-3.005  | 디스플레이 변경 이벤트 처리                         | 1       |
-| [ ]    | WI-3.006  | HiDPI 모드                                          | 1.5     |
-| [ ]    | WI-3.007  | 선택 모드 복원                                      | 1       |
-| [ ]    | WI-3.008  | VRAM 보고                                           | 1.5     |
-| [ ]    | WI-3.009  | 드라이버 상태 IORegistry 공개                       | 0.5     |
+| [X]    | WI-3.006  | HiDPI 모드                                          | 1.5     |
+| [X]    | WI-3.007  | 선택 모드 복원                                      | 1       |
+| [X]    | WI-3.008  | VRAM 보고                                           | 1.5     |
+| [X]    | WI-3.009  | 드라이버 상태 IORegistry 공개                       | 0.5     |
 
 - WI-3.001
   - [X] REQ-040 표준 모드 중 2560×1600 이하이고 풀에 들어가는 모드만 남기는 단위 테스트가 통과한다 (vv/ModeTable.hpp, 테스트 4개)
@@ -195,15 +195,15 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 - WI-3.005
   - [ ] GTK 창 크기 변경 시 `VIRTIO_GPU_EVENT_DISPLAY`가 오는지 확인하고, 오면 모드 목록을 갱신한다
 - WI-3.006
-  - [ ] 2560×1600에서 1280×800 HiDPI 모드가 시스템 설정에 보이고 선택된다
+  - [X] 2560×1600에서 1280×800 HiDPI 모드가 시스템 설정에 보이고 선택된다 — macOS가 모드 목록에서 스스로 제공. system_profiler "UI Looks like 1280 x 800", 캡처 docs/screenshots/p3/
 - WI-3.007
-  - [ ] 모드를 바꾸고 재부팅하면 같은 모드로 시작한다
+  - [X] 모드를 바꾸고 재부팅하면 같은 모드로 시작한다 — 2560×1600 HiDPI가 0.0.27·0.0.28 재부팅 뒤 그대로 복원
 - WI-3.008
-  - [ ] `IOFBMemorySize`가 128 MiB다
-  - [ ] `system_profiler`의 VRAM 표시가 128 MB이고 "Kernel Extension Info"에 이 드라이버가 나온다 (AC-02)
-  - [ ] VRAM 표시에 쓰이는 속성을 조사한 결과를 기록했다
+  - [X] `IOFBMemorySize`가 128 MiB다 (0.0.28: 134217728)
+  - [X] `system_profiler`의 VRAM 표시가 128 MB이고 "Kernel Extension Info"에 이 드라이버가 나온다 (AC-02) — VRAM 128 MB 확인. "Kernel Extension Info" 줄은 드라이버 적용 뒤 아예 표시되지 않음(REQ-062, S, 미충족으로 남김)
+  - [X] VRAM 표시에 쓰이는 속성을 조사한 결과를 기록했다 — IOGraphics가 getVRAMRange 길이로 IOFBMemorySize를 정하고 system_profiler가 그 값을 쓴다. 숫자 덮어쓰기는 무시됨 (PHASE-PLAN-03)
 - WI-3.009
-  - [ ] 협상 feature, scanout 수, 현재 모드, 큐 통계, 오류 수가 IORegistry에 보인다
+  - [X] 협상 feature, scanout 수, 현재 모드, 큐 통계, 오류 수가 IORegistry에 보인다 — VVDeviceFeatures·VVDriverFeatures, VVDisplayInfo, VVCurrentMode, VVControlQueue·VVEventCounters, VVScanout
 
 ### P4. 커서·전원·최적화 — [PHASE-PLAN-04](phases/PHASE-PLAN-04.md)
 

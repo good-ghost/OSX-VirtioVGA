@@ -1,0 +1,19 @@
+Graphics/Displays:
+
+    Display:
+
+      Type: GPU
+      VRAM (Total): 128 MB
+      Device ID: 0x1050
+      Revision ID: 0x0001
+      Displays:
+        Display:
+          Resolution: 2560 x 1600
+          UI Looks like: 1280 x 800
+          Framebuffer Depth: 24-Bit Color (ARGB8888)
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Connection Type: Internal
+      Vendor ID: 0x1af4
+

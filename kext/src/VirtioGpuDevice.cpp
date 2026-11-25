@@ -46,6 +46,16 @@ constexpr uint32_t kPatternStartDelayMs = 90000;
 // 부트 프레임버퍼 넘겨받기 boot-arg와 시작 지연 (VirtioGpuDeviceTakeover.cpp 머리말).
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
 constexpr uint32_t kTakeoverDelayMs = 60000;
+// 화면 전송 주기 boot-arg (WI-2.007, REQ-032). 기본 16 ms(약 60 Hz), 허용 범위 밖이면 기본값.
+constexpr const char *kFlushIntervalBootArg = "vvideo_flush_ms";
+constexpr uint32_t kDefaultFlushIntervalMs = 16;
+constexpr uint32_t kMinFlushIntervalMs = 4;
+constexpr uint32_t kMaxFlushIntervalMs = 1000;
+// 실패 주입 boot-arg (WI-2.008, AC-06). 값이 단계 번호와 같으면 그 단계에서 실패한 것처럼 처리한다.
+constexpr const char *kFailBootArg = "vvideo_fail";
+constexpr int kFailTransport = 1;    // 전송 계층 준비
+constexpr int kFailBringUp = 2;      // 장치 초기화(feature·큐·DRIVER_OK)
+constexpr int kFailFramebuffer = 3;  // 프레임버퍼 할당
 // stop에서 실행 중인 확인 명령이 끝나기를 기다리는 한도. 명령 기한(kCommandTimeoutMs)보다 넉넉히 잡는다.
 constexpr uint32_t kDisplayQueryDrainMs = 3000;
 constexpr uint32_t kDrainPollMs = 1;
@@ -72,6 +82,22 @@ bool bootArgEnabled(const char *name)
 bool testResetRequested()
 {
     return bootArgEnabled(kTestResetBootArg);
+}
+
+uint32_t flushIntervalFromBootArgs()
+{
+    int value = 0;
+    if (!PE_parse_boot_argn(kFlushIntervalBootArg, &value, sizeof(value)) || value < static_cast<int>(kMinFlushIntervalMs) ||
+        value > static_cast<int>(kMaxFlushIntervalMs)) {
+        return kDefaultFlushIntervalMs;
+    }
+    return static_cast<uint32_t>(value);
+}
+
+bool failureInjected(int stage)
+{
+    int value = 0;
+    return PE_parse_boot_argn(kFailBootArg, &value, sizeof(value)) && value == stage;
 }
 
 v::IrqMode irqModeFromBootArgs()
@@ -110,6 +136,8 @@ bool VirtioGpuDevice::start(IOService *provider)
         return true;
     }
     mPci->retain();
+    mFlushIntervalMs = flushIntervalFromBootArgs();
+    setProperty("VVFlushIntervalMs", mFlushIntervalMs, 32);
     mWorkLoop = IOWorkLoop::workLoop();
     if (mWorkLoop == nullptr) {
         failDevice("workloop");
@@ -120,8 +148,8 @@ bool VirtioGpuDevice::start(IOService *provider)
     v::pci::LayoutError layoutError = v::pci::LayoutError::None;
     mTransport = VirtioPciTransport::withDevice(mPci, sizeof(v::gpu::Config), &layoutError);
     setProperty("VVLayoutResult", v::pci::layoutErrorName(layoutError));
-    if (mTransport == nullptr) {
-        failDevice("transport");
+    if (mTransport == nullptr || failureInjected(kFailTransport)) {
+        failDevice(mTransport == nullptr ? "transport" : "injected:transport");
         return true;
     }
     mIrqMode = irqModeFromBootArgs();
@@ -146,6 +174,10 @@ bool VirtioGpuDevice::start(IOService *provider)
         return true;
     }
     const char *failure = nullptr;
+    if (failureInjected(kFailBringUp)) {
+        failDevice("injected:bring-up");
+        return true;
+    }
     if (!bringUpDevice(&failure)) {
         failDevice(failure);
         return true;
@@ -155,7 +187,12 @@ bool VirtioGpuDevice::start(IOService *provider)
     queryDisplayInfo();
     runSelfTest();
     probeContiguousAllocation();
-    allocateFramebuffer(mPreferredMode);
+    if (failureInjected(kFailFramebuffer)) {
+        setProperty("VVFramebuffer", "injected-failure");
+        restoreNdrv("injected:framebuffer");
+    } else if (!allocateFramebuffer(mPreferredMode)) {
+        restoreNdrv("framebuffer");
+    }
     publishCounters();
     vv::publishLog(this);
     requestFramebufferMatch();
@@ -631,6 +668,7 @@ void VirtioGpuDevice::failDevice(const char *reason)
 {
     VV_LOG_ERR("gpu: init failed: %s", reason);
     setProperty("VVInitResult", reason);
+    restoreNdrv(reason);
     if (mTransport != nullptr) {
         // §3.1.1: 회복할 수 없으면 FAILED를 쓴다.
         mTransport->addStatus(v::status::kFailed);

@@ -10,7 +10,10 @@
 #include "VirtioGpuDevice.hpp"
 #include "VirtioGpuDevicePrivate.hpp"
 
+#include <IOKit/IOMemoryDescriptor.h>
+#include <IOKit/IOPlatformExpert.h>
 #include <libkern/OSAtomic.h>
+#include <pexpert/pexpert.h>
 
 #include "VVDmaBuffer.hpp"
 #include "VVLog.hpp"
@@ -19,12 +22,12 @@ namespace {
 namespace v = vv::virtio;
 using namespace vv::gpudevice;
 
-// 약 60 Hz (REQ-032 기본값).
-constexpr uint32_t kFlushIntervalMs = 16;
 // resource를 잃었을 때 다시 만드는 간격.
 constexpr uint32_t kResourceRetryMs = 1000;
-// 속성 갱신 간격(전송 횟수 기준). 매 전송마다 setProperty를 부르지 않기 위해서다 (약 1초).
-constexpr uint32_t kPublishEveryFlushes = 60;
+// 속성 갱신 간격. 매 전송마다 setProperty를 부르지 않도록 약 1초에 한 번만 갱신한다.
+constexpr uint32_t kPublishIntervalMs = 1000;
+// 부트 화면 복사 조건: 펌웨어 화면이 32bpp일 때만 그대로 복사할 수 있다.
+constexpr unsigned long kBootScreenDepth = 32;
 constexpr uint32_t kScanoutId = 0;
 // stopScanout에서 전송 루프가 끝나기를 기다리는 한도.
 constexpr uint32_t kFlushLoopDrainMs = 3000;
@@ -100,6 +103,46 @@ void VirtioGpuDevice::tearDownScanoutResource(bool disableScanout)
     mScanoutResourceId = 0;
 }
 
+void VirtioGpuDevice::copyBootScreen()
+{
+    // 펌웨어(OVMF GOP)가 그린 화면이 우리 프레임버퍼와 같은 크기·형식일 때만 복사한다. 아니면 검은 화면에서 시작한다.
+    PE_Video boot{};
+    const char *result = "skipped:no-console-info";
+    IOPlatformExpert *platform = getPlatform();
+    if (platform != nullptr && platform->getConsoleInfo(&boot) == kIOReturnSuccess && boot.v_baseAddr != 0) {
+        const vv::display::Mode mode = mFramebufferMode;
+        const uint32_t rowBytes = vv::display::rowBytes(mode);
+        if (boot.v_width != mode.width || boot.v_height != mode.height || boot.v_depth != kBootScreenDepth ||
+            boot.v_rowBytes < rowBytes) {
+            result = "skipped:mode-mismatch";
+        } else {
+            const IOByteCount length = boot.v_rowBytes * boot.v_height;
+            IOMemoryDescriptor *source =
+                IOMemoryDescriptor::withPhysicalAddress(static_cast<IOPhysicalAddress>(boot.v_baseAddr), length, kIODirectionIn);
+            IOMemoryMap *map = source != nullptr ? source->map() : nullptr;
+            if (map == nullptr) {
+                result = "failed:map";
+            } else {
+                const auto *src = reinterpret_cast<const uint8_t *>(map->getVirtualAddress());
+                auto *dst = static_cast<uint8_t *>(mFramebuffer->cpuAddress());
+                for (uint32_t y = 0; y < mode.height; ++y) {
+                    bcopy(src + y * boot.v_rowBytes, dst + y * rowBytes, rowBytes);
+                }
+                result = "copied";
+                map->release();
+            }
+            if (source != nullptr) {
+                source->release();
+            }
+        }
+    }
+    char summary[kSummaryBytes];
+    snprintf(summary, sizeof(summary), "%s boot=%lux%lu@%lu rowBytes=%lu", result, boot.v_width, boot.v_height,
+             boot.v_depth, boot.v_rowBytes);
+    setProperty("VVBootScreenCopy", summary);
+    VV_LOG_INFO("gpu: boot screen %s", summary);
+}
+
 IOReturn VirtioGpuDevice::startScanout()
 {
     if (!isReadyForFramebuffer() || mFlushCall == nullptr) {
@@ -109,6 +152,7 @@ IOReturn VirtioGpuDevice::startScanout()
         return kIOReturnSuccess;
     }
     mScanoutRequested = true;
+    copyBootScreen();
     if (!setUpScanoutResource()) {
         // 루프가 kResourceRetryMs 간격으로 다시 시도한다.
         VV_LOG_ERR("gpu: initial scanout setup failed, will retry");
@@ -148,6 +192,8 @@ void VirtioGpuDevice::deferredFlushLoop(thread_call_param_t owner, thread_call_p
 
 void VirtioGpuDevice::runFlushLoop()
 {
+    const uint32_t interval = mFlushIntervalMs;
+    const uint32_t publishEvery = kPublishIntervalMs / interval > 0 ? kPublishIntervalMs / interval : 1;
     uint32_t sinceRetry = kResourceRetryMs;
     while (mScanoutRequested && !mStopping) {
         if (mGivenUp || mTransport == nullptr) {
@@ -161,8 +207,8 @@ void VirtioGpuDevice::runFlushLoop()
                     publishScanout("running");
                 }
             }
-            IOSleep(kFlushIntervalMs);
-            sinceRetry += kFlushIntervalMs;
+            IOSleep(interval);
+            sinceRetry += interval;
             continue;
         }
         const vv::display::Mode mode = mFramebufferMode;
@@ -177,10 +223,10 @@ void VirtioGpuDevice::runFlushLoop()
             vv::publishLog(this);
         } else {
             ++mFlushes;
-            if (mFlushes % kPublishEveryFlushes == 0) {
+            if (mFlushes % publishEvery == 0) {
                 publishScanout("running");
             }
         }
-        IOSleep(kFlushIntervalMs);
+        IOSleep(interval);
     }
 }

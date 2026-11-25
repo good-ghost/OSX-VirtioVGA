@@ -130,6 +130,11 @@ private:
     bool setUpScanoutResource();
     void tearDownScanoutResource(bool disableScanout);
     void publishScanout(const char *state);
+    // 부트 화면(펌웨어 GOP 프레임버퍼)을 우리 프레임버퍼로 복사한다 (WI-2.009, REQ-035). scanout 연결 직전에 부른다.
+    void copyBootScreen();
+    // 우리 장치가 화면을 맡을 수 없게 되면(시작 실패) GPU PCI 장치의 AAPL,iokit-ignore-ndrv를 지우고 매칭을 다시 돌려
+    // IONDRV가 화면을 맡게 한다 (WI-2.008, REQ-004, REQ-005, AC-06). 실행 중 종료가 아니라 "붙이기"라 안전하다.
+    void restoreNdrv(const char *reason);
 
     // 부트 프레임버퍼 넘겨받기 (WI-2.006 범위, boot-arg `vvideo_takeover=1`, VirtioGpuDeviceTakeover.cpp).
     static void takeoverTimerFired(OSObject *owner, IOTimerEventSource *sender);
@@ -193,6 +198,7 @@ private:
     volatile bool mScanoutRequested = false;
     volatile bool mFlushLoopRunning = false;
     uint32_t mScanoutResourceId = 0;  // 0이면 아직 연결 안 됨 (또는 장치 reset으로 잃음)
+    uint32_t mFlushIntervalMs = 0;  // start에서 boot-arg로 정한다 (WI-2.007)
     uint32_t mFlushes = 0;
     uint32_t mFlushErrors = 0;
     uint32_t mScanoutSetups = 0;

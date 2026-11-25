@@ -136,3 +136,16 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 관찰:
 - ③ 테두리가 사라지고 안쪽 색이 원본 파일 색과 같아졌다. 배경 저장소에 EDID 기반 디스플레이 UUID(`17E44908-…`, `2043E827-…`, `E368AAE8-…`)가 생겼다(전에는 `FFFFFFFF-…`만). 디스플레이 식별(EDID, WI-3.003)이 테두리·색 문제와 관련 있다는 §2.5의 추정과 맞는다. 인과는 확인하지 못했다.
 - ②④⑤는 예상대로 그대로다(Q-12: Metal 범위 밖). Sequoia는 Metal로 그리는 확장이라(§2.5.2) 대체 색만 바뀌었다.
+
+### WI-5.003 언로드·재로드 (2026-11-25)
+
+배경: kext는 이제 OpenCore 주입이 아니라 보조 kernel collection(`/Library/Extensions`, `kmutil load -z -p`)에 있다(Q-01 v1.2). 보조 kext NdrvBlocker는 Boot KC(OpenCore 주입)라 원래 언로드할 수 없다.
+
+| 시험 | 결과 |
+| ---- | ---- |
+| 시험 전 상태 (01:49:17) | 0.0.42 `driver-ok`, `VirtioGpuDevice 1, VirtioVideoFramebuffer 1, VirtioQueue 2, VVDmaBuffer 6`, 패닉 보고서 5개 |
+| 화면 사용 중 `sudo kmutil unload -b local.virtiovideo.VirtioVideo` (사용자가 호스트 스냅샷 후 실행) | **패닉 상태로 멈춤, 자동 재부팅 안 됨.** pmset `01:50:45 Power button pressed for > 4 sec`(강제 종료). 새 패닉 보고서 없음(멈춘 채 저장 못 함), 01:49~01:50 통합 로그도 남지 않음 → 멈춘 위치는 확인 못 함 |
+
+해석: 언로드는 먼저 우리 서비스를 terminate한다. 사용 중인 프레임버퍼를 terminate하면 Apple 쪽 프레임버퍼 클라이언트가 종료 알림을 처리하다 실패한다는 것을 2026-11-24 IONDRV 실험에서 이미 봤다(`AppleUpstreamUserClientDriver::fbNotificationOccurred` NULL 참조, PHASE-PLAN-02). 같은 경로로 보이지만 이번 보고서가 없어 확정하지 못했다.
+
+결론: **화면을 맡고 있는 동안의 언로드·재로드는 지원할 수 없다.** NFR-003을 "kext 교체는 재부팅으로 한다(`kmutil load -z -p` 후 재부팅)"로 바꿨다(사용자 승인 "Change to reboot", REQUIREMENT v1.3). `-vvideooff` 상태의 언로드는 시험하지 않았다.

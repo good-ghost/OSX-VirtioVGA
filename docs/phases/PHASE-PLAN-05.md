@@ -120,3 +120,19 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 - 읽기만 한다: `IORegistryEntryCreateCFProperty(ies)`만 쓰고 user client를 열지 않는다. root 불필요.
 - 종료 코드: 0 = `VVInitResult driver-ok`이고 프레임버퍼 연결, 1 = 찾지 못함 또는 동작 중 아님, 2 = 사용법 오류. 실행해 0·2를 확인했다.
 - 찾은 결함: `VVEventCounters` 요약이 128바이트를 넘어 `errors`·`recoveries`가 잘렸다(`... timeouts=0 er`). 0.0.42에서 이 요약만 256바이트로 늘렸다. 설치·재부팅 뒤 `vvstat`에서 `... timeouts=0 errors=1 recoveries=0`까지 나오는 것을 확인했다.
+
+### WI-5.007 배경화면·투명 효과 전후 비교 (2026-11-25)
+
+방법: `scripts/ac07-measure.swift`(CoreGraphics 픽셀 읽기, Metal 장치 수)로 §2.5와 같은 위치를 point 단위로 잰다. 이전 캡처에 돌려 §2.5 값(테두리 16 pt RGB(0,124,143), 안쪽 RGB(0,188,217), 메뉴 막대 RGB(218,218,218))이 그대로 나오는 것을 먼저 확인했다. 이후 캡처는 kext 0.0.42, 2560×1600(HiDPI, 1280×800 pt), `screencapture -x`. 배경은 `osascript`로 잠시 바꾸고 원래 값(`Solid Colors/Cyan.png`)으로 되돌렸다.
+
+| 항목 | 적용 전 (2026-11-23, IONDRV 1280×800) | 적용 후 (0.0.42) |
+| ---- | ------------------------------------- | ---------------- |
+| ① 정적 사진(Sonoma.heic) | 정상, 테두리 없음 | 정상. 가장자리까지 그려짐(왼쪽 RGB(111,150,58), 아래 RGB(179,216,78)), 테두리 없음 — `docs/screenshots/p5/ac07-sonoma-after.png` |
+| ② Sequoia 배경 | Cyan 단색 대체 | **여전히 그려지지 않음.** 사용자가 설정에서 Sequoia를 고르니 흰색 단색 RGB(255,255,255)으로 채워짐(대체 색만 Cyan → 흰색). `get picture` = `DefaultDesktop.heic` — `docs/screenshots/p5/ac07-sequoia-after.png` |
+| ③ 단색 배경 16 px 테두리 | 있음, RGB(0,124,143) | **없음.** 화면 끝까지 RGB(20,175,208) — 원본 파일 색과 같다 — `docs/screenshots/p5/ac07-cyan-after.png` |
+| ④ 메뉴 막대·Dock 투명 효과 | 없음 (RGB 218/200 불투명) | 메뉴 막대 없음: 세 위치 모두 RGB(218,218,218), 뒤 사진이 비치지 않음. Dock 불투명(사용자 확인, 캡처에는 화면 기록 권한이 없어 나오지 않음) |
+| ⑤ `MTLCopyAllDevices()` | 빈 목록 | 빈 목록(0개) |
+
+관찰:
+- ③ 테두리가 사라지고 안쪽 색이 원본 파일 색과 같아졌다. 배경 저장소에 EDID 기반 디스플레이 UUID(`17E44908-…`, `2043E827-…`, `E368AAE8-…`)가 생겼다(전에는 `FFFFFFFF-…`만). 디스플레이 식별(EDID, WI-3.003)이 테두리·색 문제와 관련 있다는 §2.5의 추정과 맞는다. 인과는 확인하지 못했다.
+- ②④⑤는 예상대로 그대로다(Q-12: Metal 범위 밖). Sequoia는 Metal로 그리는 확장이라(§2.5.2) 대체 색만 바뀌었다.

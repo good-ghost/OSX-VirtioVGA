@@ -239,7 +239,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-5.004  | 성능 측정                                           | 1       |
 | [X]    | WI-5.005  | 보안 경계 점검                                      | 1       |
 | [X]    | WI-5.006  | 호환성 점검 (Lilu/WhateverGreen, macOS 15.x)        | 0.5     |
-| [ ]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
+| [X]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
 | [X]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
 | [ ]    | WI-5.009  | 설치·운영 문서와 라이선스                           | 0.5     |
 | [ ]    | WI-5.010  | 인수 기준 최종 점검                                 | 1       |
@@ -260,7 +260,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 - WI-5.006
   - [X] Lilu·WhateverGreen이 로드된 상태에서 충돌이 없고, WhateverGreen이 이 장치를 건드리지 않음을 확인했다 — Lilu 1.6.8·WEG 1.6.7 로드 상태로 P2~P4 전체(모드 전환·잠자기·커서) 진행. Lilu 장치 분류가 vendor 0x1af4를 제외(소스 확인), GFX0 이름 변경·slot·model 흔적 없음. macOS 15.x 업데이트 없음(제공되는 것은 26.7.3, 범위 밖 Q-05)
 - WI-5.007
-  - [ ] AC-07 다섯 항목을 전후로 캡처·측정해 기록했다
+  - [X] AC-07 다섯 항목을 전후로 캡처·측정해 기록했다 — 0.0.42: ① 사진 정상 ② Sequoia 여전히 안 그려짐(흰색 대체) ③ **단색 16 px 테두리 사라짐, 원본 색과 같음** ④ 메뉴 막대·Dock 불투명 ⑤ Metal 0. ②④⑤는 범위 밖(Q-12)
 - WI-5.008
   - [X] `tools/`의 CLI가 IORegistry 상태를 읽어 출력한다 (user client 없음) — `tools/vvstat.c`(`scripts/vvstat.sh`로 빌드·실행): kext 버전(KextManager), 프레임버퍼 연결, 주요 상태 12개, `--log N`, `--all`. 읽기 전용, root 불필요. 종료 코드 0 = driver-ok. 실행 중 발견한 `VVEventCounters` 잘림은 0.0.42에서 고침
 - WI-5.009

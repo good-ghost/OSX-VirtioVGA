@@ -134,7 +134,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-2.006  | 부트 프레임버퍼 대체 (매칭·probe score)             | 1.5     |
 | [ ]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
 | [ ]    | WI-2.008  | 실패 경로와 자원 해제                               | 1       |
-| [ ]    | WI-2.009  | 부트 화면 이어받기                                  | 1       |
+| [X]    | WI-2.009  | 부트 화면 이어받기                                  | 1       |
 | [X]    | WI-2.010  | virtio-vga-gl 호환 시험                             | 0.5     |
 
 - WI-2.001
@@ -164,7 +164,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [ ] 디버그 옵션으로 초기화 각 단계 실패를 주입해도 부팅이 계속되고 `IONDRVFramebuffer`가 남는다 (AC-06) — `vvideo_fail=2`(장치 초기화) 통과(0.0.24, 0.0.25 재시험). 1(전송 계층)·3(프레임버퍼)은 아직
   - [X] boot-arg `-vvideooff`로 기존 화면으로 부팅된다 (AC-05) — 0.0.25: 보조 kext `skipped:-vvideooff`, 본 kext 서비스 0개, IONDRV
 - WI-2.009
-  - [ ] 드라이버가 화면을 넘겨받을 때 Apple 로고·진행 막대가 끊기지 않거나, 끊김이 1회 이내임을 녹화로 확인했다
+  - [X] 드라이버가 화면을 넘겨받을 때 Apple 로고·진행 막대가 끊기지 않거나, 끊김이 1회 이내임을 녹화로 확인했다 — 2026-11-24 사용자 육안 확인 "검게 끊기지 않음"(virtio-vga-gl 부팅, 녹화 없음). 부트 화면 복사는 virtio-vga에서 `copied`, gl에서는 크기 불일치로 `skipped`
 - WI-2.010
   - [X] `-device virtio-vga-gl` + `-display gtk,gl=on`에서 2D 출력이 되는지 시험하고 결과를 기록했다 (2026-11-24, kext 0.0.25: VIRGL 제공·미협상, 1600×1000 출력, flush 오류 0)
 

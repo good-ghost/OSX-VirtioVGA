@@ -240,7 +240,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-5.005  | 보안 경계 점검                                      | 1       |
 | [X]    | WI-5.006  | 호환성 점검 (Lilu/WhateverGreen, macOS 15.x)        | 0.5     |
 | [ ]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
-| [ ]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
+| [X]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
 | [ ]    | WI-5.009  | 설치·운영 문서와 라이선스                           | 0.5     |
 | [ ]    | WI-5.010  | 인수 기준 최종 점검                                 | 1       |
 
@@ -262,7 +262,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 - WI-5.007
   - [ ] AC-07 다섯 항목을 전후로 캡처·측정해 기록했다
 - WI-5.008
-  - [ ] `tools/`의 CLI가 IORegistry 상태를 읽어 출력한다 (user client 없음)
+  - [X] `tools/`의 CLI가 IORegistry 상태를 읽어 출력한다 (user client 없음) — `tools/vvstat.c`(`scripts/vvstat.sh`로 빌드·실행): kext 버전(KextManager), 프레임버퍼 연결, 주요 상태 12개, `--log N`, `--all`. 읽기 전용, root 불필요. 종료 코드 0 = driver-ok. 실행 중 발견한 `VVEventCounters` 잘림은 0.0.42에서 고침
 - WI-5.009
   - [ ] `docs/INSTALL.md`, `docs/DEBUGGING.md`가 최신이다
   - [ ] MIT `LICENSE` 파일을 사용자가 정한 저작권자 이름으로 추가했다

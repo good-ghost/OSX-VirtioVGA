@@ -112,3 +112,11 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 - 누수: 드라이버 객체 수 전후 같음(`VirtioGpuDevice 1, VirtioVideoFramebuffer 1, VirtioQueue 2, VVDmaBuffer 6, VirtioPciTransport 1`). 고정 메모리 487,130 → 486,970 페이지(감소). 시스템 전체 `IOBufferMemoryDescriptor`는 446 → 449였지만 모드 전환 없이도 20초 사이 448 → 452로 변하므로 드라이버와 무관하다.
 - 관찰: 전환마다 QEMU가 config 변경 이벤트를 하나씩 보낸다(`config=101`). 드라이버는 display info·EDID를 다시 읽고 모드 목록을 맞춘다(WI-3.005 경로).
 - `zprint`(root 필요)는 쓰지 않았다. 객체 수와 고정 메모리로 판정했다.
+
+### WI-5.008 상태 조회 CLI (2026-11-25)
+
+- `tools/vvstat.c`(C, IOKit·CoreFoundation, 새 의존성 없음). `scripts/vvstat.sh`가 `build/vvstat`로 빌드해 실행한다.
+- 출력: kext 버전(`KextManagerCopyLoadedKextInfo`), 프레임버퍼 연결 여부, 요약 12개(init·mode·preferred·scanout·display power·cursor·dirty flush·edid·events·recoveries·irq·features). `--log N`은 `VVLog` 마지막 N줄, `--all`은 VV* 속성 전체.
+- 읽기만 한다: `IORegistryEntryCreateCFProperty(ies)`만 쓰고 user client를 열지 않는다. root 불필요.
+- 종료 코드: 0 = `VVInitResult driver-ok`이고 프레임버퍼 연결, 1 = 찾지 못함 또는 동작 중 아님, 2 = 사용법 오류. 실행해 0·2를 확인했다.
+- 찾은 결함: `VVEventCounters` 요약이 128바이트를 넘어 `errors`·`recoveries`가 잘렸다(`... timeouts=0 er`). 0.0.42에서 이 요약만 256바이트로 늘렸다. 설치·재부팅 뒤 `vvstat`에서 `... timeouts=0 errors=1 recoveries=0`까지 나오는 것을 확인했다.

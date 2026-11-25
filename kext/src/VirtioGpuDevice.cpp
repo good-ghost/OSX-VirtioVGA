@@ -869,7 +869,8 @@ void VirtioGpuDevice::checkStatus()
 
 void VirtioGpuDevice::publishCounters()
 {
-    char summary[kSummaryBytes];
+    // 카운터 11개는 kSummaryBytes(128)를 넘어 뒤가 잘렸다 (WI-5.008 vvstat로 발견). 이 요약만 두 배로 잡는다.
+    char summary[kSummaryBytes * 2];
     snprintf(summary, sizeof(summary),
              "interrupts=%u config=%u controlq=%u cursorq=%u completions=%u/%u device-errors=%u commands=%u "
              "timeouts=%u errors=%u recoveries=%u",

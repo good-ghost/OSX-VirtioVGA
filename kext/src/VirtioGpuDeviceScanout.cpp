@@ -24,6 +24,8 @@ using namespace vv::gpudevice;
 
 // resource를 잃었을 때 다시 만드는 간격.
 constexpr uint32_t kResourceRetryMs = 1000;
+// 디스플레이가 꺼져 있을 때 깨어났는지 확인하는 간격. 깨어난 뒤 첫 화면이 늦어도 이 정도다.
+constexpr uint32_t kPausedPollMs = 50;
 // 속성 갱신 간격. 매 전송마다 setProperty를 부르지 않도록 약 1초에 한 번만 갱신한다.
 constexpr uint32_t kPublishIntervalMs = 1000;
 // 부트 화면 복사 조건: 펌웨어 화면이 32bpp일 때만 그대로 복사할 수 있다.
@@ -184,6 +186,25 @@ void VirtioGpuDevice::stopScanout()
     vv::publishLog(this);
 }
 
+void VirtioGpuDevice::setDisplayPowered(bool powered)
+{
+    if (powered == !mFlushPaused) {
+        return;
+    }
+    mFlushPaused = !powered;
+    if (powered) {
+        ++mDisplayWakes;
+    } else {
+        ++mDisplaySleeps;
+    }
+    char summary[kSummaryBytes];
+    snprintf(summary, sizeof(summary), "%s sleeps=%u wakes=%u", powered ? "on" : "off", mDisplaySleeps, mDisplayWakes);
+    setProperty("VVDisplayPower", summary);
+    VV_LOG_INFO("gpu: display power %s", summary);
+    publishScanout(powered ? "running" : "paused");
+    vv::publishLog(this);
+}
+
 IOReturn VirtioGpuDevice::changeMode(const vv::display::Mode &mode)
 {
     if (!isReadyForFramebuffer()) {
@@ -256,6 +277,12 @@ void VirtioGpuDevice::runFlushLoop()
             }
             IOSleep(interval);
             sinceRetry += interval;
+            continue;
+        }
+        if (mFlushPaused) {
+            // 디스플레이가 꺼져 있다 (WI-4.002). 화면을 보낼 필요가 없으므로 전송하지 않고 쉰다.
+            // 다시 켜지면 다음 주기에 전체 화면을 보낸다.
+            IOSleep(kPausedPollMs);
             continue;
         }
         const vv::display::Mode mode = mFramebufferMode;

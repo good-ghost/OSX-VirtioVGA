@@ -66,6 +66,9 @@ public:
     // 해상도를 바꾼다 (WI-3.002, REQ-034). 프레임버퍼는 최대 모드 크기로 한 번 잡아 두고 모든 모드가 앞부분을 쓴다
     // (실행 중 물리 연속 재할당을 피하기 위해, T-01). scanout 중이면 전송을 멈추고 새 크기의 resource로 바꾼 뒤 다시 시작한다.
     IOReturn changeMode(const vv::display::Mode &mode);
+    // 디스플레이 잠자기(WI-4.002, REQ-053): 꺼지면 주기 전송을 멈추고, 켜지면 다시 시작한다.
+    // 프레임버퍼 클래스가 IOGraphics 전원 속성(kIOPowerAttribute)을 받을 때 부른다.
+    void setDisplayPowered(bool powered);
     // 장치가 알려 준 선호 해상도 (WI-3.004).
     vv::display::Mode preferredMode() const { return mPreferredMode; }
     // 검증을 통과한 EDID를 out에 복사하고 길이를 돌려준다. 없으면 0 (WI-3.003).
@@ -211,6 +214,9 @@ private:
     uint32_t mScanoutResourceId = 0;  // 0이면 아직 연결 안 됨 (또는 장치 reset으로 잃음)
     uint32_t mFlushIntervalMs = 0;  // start에서 boot-arg로 정한다 (WI-2.007)
     uint32_t mModeChanges = 0;
+    volatile bool mFlushPaused = false;  // 디스플레이가 꺼져 있는 동안 true
+    uint32_t mDisplaySleeps = 0;
+    uint32_t mDisplayWakes = 0;
     uint8_t mEdid[vv::virtio::gpu::kMaxEdidBytes] = {};
     size_t mEdidBytes = 0;
     uint32_t mDisplayEvents = 0;

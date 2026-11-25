@@ -347,9 +347,12 @@ IOReturn VirtioVideoFramebuffer::setAttribute(IOSelect attribute, uintptr_t valu
 {
     trace("set", attribute, value);
     if (attribute == kIOPowerAttribute) {
-        // IOFramebuffer가 전원 상태를 바꿀 때 하위 클래스에 알린다. virtio-gpu에는 전원 명령이 없으므로 값만 기억한다.
-        // (디스플레이 잠자기 처리는 WI-4.002.)
+        // IOFramebuffer가 전원 상태를 바꿀 때 하위 클래스에 알린다. virtio-gpu에는 전원 명령이 없으므로
+        // 값을 기억하고, 0(꺼짐)이면 주기 전송을 멈춘다 (WI-4.002, REQ-053). 0보다 크면 다시 보낸다.
         mPowerState = value;
+        if (mGpu != nullptr) {
+            mGpu->setDisplayPowered(value != 0);
+        }
         return kIOReturnSuccess;
     }
     return IOFramebuffer::setAttribute(attribute, value);

@@ -90,6 +90,7 @@ bool VirtioGpuDevice::setUpScanoutResource()
     }
     mScanoutResourceId = resourceId;
     mScanoutBlanked = false;  // 방금 SET_SCANOUT으로 연결했다
+    mShadowValid = false;     // 새 resource: 변경 감지 기준을 다시 잡는다 (WI-4.004)
     ++mScanoutSetups;
     VV_LOG_INFO("gpu: scanout %u -> resource %u (%ux%u)", kScanoutId, resourceId, mode.width, mode.height);
     return true;
@@ -319,6 +320,7 @@ void VirtioGpuDevice::runFlushLoop()
                         restored);
             if (restored == kIOReturnSuccess) {
                 mScanoutBlanked = false;
+                mShadowValid = false;  // 깨어난 뒤 첫 주기는 전체를 보낸다
                 publishScanout("running");
                 vv::publishLog(this);
             } else {
@@ -329,8 +331,7 @@ void VirtioGpuDevice::runFlushLoop()
                 continue;
             }
         }
-        if (transferToHost(mScanoutResourceId, mode) != kIOReturnSuccess ||
-            flushResource(mScanoutResourceId, mode) != kIOReturnSuccess) {
+        if (!flushFrame(mode)) {
             ++mFlushErrors;
             VV_LOG_ERR("gpu: flush failed, recreating resource");
             // 장치 쪽에 resource가 남아 있을 수 있으니 정리를 시도한 뒤 다시 만든다.
@@ -342,6 +343,7 @@ void VirtioGpuDevice::runFlushLoop()
             ++mFlushes;
             if (mFlushes % publishEvery == 0) {
                 publishScanout("running");
+                publishDirtyStats();
             }
         }
         IOSleep(interval);

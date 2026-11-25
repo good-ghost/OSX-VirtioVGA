@@ -32,6 +32,7 @@
 
 #include "vv/Cursor.hpp"
 #include "vv/DeviceHealth.hpp"
+#include "vv/DirtyTiles.hpp"
 #include "vv/DisplayMode.hpp"
 #include "vv/GpuCommand.hpp"
 #include "vv/VirtioIrq.hpp"
@@ -54,6 +55,8 @@ public:
     bool start(IOService *provider) override;
     void stop(IOService *provider) override;
     IOWorkLoop *getWorkLoop() const override;
+    // 변경 감지 전송 설정을 실행 중에 바꾼다 (WI-4.004, root만). VVDirtyFlush(0/1), VVDirtyTile.
+    IOReturn setProperties(OSObject *properties) override;
 
     // 화면 출력 (WI-2.005, VirtioGpuDeviceScanout.cpp). 프레임버퍼 클래스(VirtioVideoFramebuffer)가 부른다.
     // 장치가 초기화되어 프레임버퍼를 줄 수 있으면 true.
@@ -114,6 +117,15 @@ private:
     void stopTimers();
     void checkStatus();
     void publishCounters();
+    // 변경 감지 전송 (VirtioGpuDeviceDirty.cpp, WI-4.004)
+    void loadDirtySettings();
+    bool ensureShadow(const vv::display::Mode &mode);
+    void releaseShadow();
+    // 한 주기 전송. 실패하면 false (호출자가 resource를 다시 만든다). 바뀐 것이 없어 건너뛰어도 true.
+    bool flushFrame(const vv::display::Mode &mode);
+    IOReturn transferRect(uint32_t resourceId, const vv::dirty::Rect &rect, uint32_t pitch);
+    IOReturn flushRect(uint32_t resourceId, const vv::dirty::Rect &rect);
+    void publishDirtyStats();
     // 커서 (VirtioGpuDeviceCursor.cpp)
     bool ensureCursorResource();
     uint32_t cursorScaleSetting();
@@ -227,6 +239,19 @@ private:
     IOTimerEventSource *mPatternTimer = nullptr;
     // 실행 중인 thread_call(확인 명령·시험 패턴) 수. stop에서 0이 될 때까지 기다린다
     volatile SInt32 mDisplayQueryActive = 0;
+    // 변경 감지 전송 (WI-4.004). shadow는 전송 루프 스레드만 쓴다.
+    volatile bool mDirtyEnabled = false;
+    volatile bool mShadowValid = false;
+    volatile uint32_t mDirtyTile = 64;
+    uint8_t *mShadow = nullptr;
+    size_t mShadowBytes = 0;
+    uint32_t mFullFrames = 0;
+    uint32_t mPartialFrames = 0;
+    uint32_t mSkippedFrames = 0;
+    uint32_t mScans = 0;
+    uint64_t mScanTicks = 0;
+    uint64_t mSentBytes = 0;
+    uint64_t mFullEquivalentBytes = 0;
     // 커서 (WI-4.001). resource는 장치 복구(reset) 때 사라지므로 만든 때의 복구 횟수를 기억해 다시 만든다.
     VVDmaBuffer *mCursorBacking = nullptr;   // 64×64 BGRA 이미지, 장치가 TRANSFER 때 읽는다
     VVDmaBuffer *mCursorRequests = nullptr;  // cursorq 요청 칸. 칸 번호 = 디스크립터 번호

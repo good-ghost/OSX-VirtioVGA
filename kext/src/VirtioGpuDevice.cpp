@@ -131,6 +131,7 @@ bool VirtioGpuDevice::start(IOService *provider)
     if (!vv::initLog()) {
         setProperty("VVLogInitFailed", true);
     }
+    loadDirtySettings();
     mPci = OSDynamicCast(IOPCIDevice, provider);
     if (mPci == nullptr) {
         failDevice("provider-not-pci");
@@ -736,6 +737,7 @@ void VirtioGpuDevice::releaseDevice()
         mCommandBuffer = nullptr;
     }
     releaseCursor();
+    releaseShadow();
 }
 
 void VirtioGpuDevice::publishPciDiagnostics(IOPCIDevice *pci)

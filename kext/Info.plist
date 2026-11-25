@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.40</string>
+	<string>0.0.41</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.40</string>
+	<string>0.0.41</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>VirtioGpuDevice</key>
@@ -30,6 +30,10 @@
 			<string>VirtioVideoGpu</string>
 			<key>VVCursorScale</key>
 			<integer>50</integer>
+			<key>VVDirtyFlush</key>
+			<integer>0</integer>
+			<key>VVDirtyTile</key>
+			<integer>64</integer>
 			<key>IOPCIMatch</key>
 			<string>0x10501af4</string>
 			<key>IOProviderClass</key>

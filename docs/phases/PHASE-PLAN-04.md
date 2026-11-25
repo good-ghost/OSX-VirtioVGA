@@ -110,3 +110,24 @@ WI-4.002를 먼저 한다. 사용자가 매일 겪는 동작이기 때문이다.
 
 커서 크기: QEMU 10.0 `ui/gtk.c gd_cursor_define`은 커서 이미지를 픽셀 크기 그대로 호스트 GDK 커서로 만든다(창 배율을 적용하지 않음). 게스트는 HiDPI 2560×1600이라 WindowServer가 2배 커서를 준다. 호스트 창이 게스트 화면을 축소해 보여 주면 화면만 줄고 커서는 그대로여서 커 보인다. 드라이버는 호스트 배율을 알 수 없다.
 | 0.0.40 | 대체 경로: boot-args `keepsyms=1 -vvideoswcursor` (config.plist 백업 `config.plist.bak-20261125-wi4001`) | `get(crsr)=0`, `VVCursor resource=0 images=0 moves=0`, `cursorq=0`. 게스트 커서가 프레임버퍼에 그려져 화면과 함께 줄고 모양이 바뀜, 호스트 포인터도 보임(0.0.38 이전과 같은 동작). 패닉 없음. 시험 뒤 boot-args를 `keepsyms=1`로 되돌림 |
+
+### WI-4.004 변경 감지 전송 (2026-11-25)
+
+기준(0.0.40, 2560×1600 60 Hz 전체 전송, 정지 화면): `kernel_task` 약 6%. 전체 복사는 호스트(QEMU)가 한다.
+
+| 버전 | 내용 | 결과 |
+| ---- | ---- | ---- |
+| 0.0.41 | `vv::dirty::scan`: 타일(기본 64)마다 shadow와 행 단위 비교, 바뀐 행은 shadow로 복사. band별 가장 왼쪽~오른쪽 바뀐 타일을 사각형 하나로, 가로 범위가 같은 이웃 band는 합침. 16개를 넘으면 전체 한 장. 바뀐 사각형만 `TRANSFER_TO_HOST_2D`(offset = y·pitch + x·4), 덮는 사각형 하나 `RESOURCE_FLUSH`, 바뀐 것이 없으면 명령 없음. 새 resource·깨어남·설정 변경 때 기준을 다시 잡는다(전체 전송). 설정: Info.plist `VVDirtyFlush`(기본 0)·`VVDirtyTile`(64) > boot-arg `vvideo_dirty`·`vvideo_dirty_tile`, 실행 중 전환은 `scripts/vvctl.sh dirty 0|1 [tile]`(관리자만, `setProperties`). 통계 `VVDirtyStats`. 측정 `scripts/measure-flush.sh <장면>` → `docs/research/p4-performance.log`. 단위 테스트 82개(변경 감지 6 추가) | 아래 측정 1·2 |
+
+측정 1 — 정지 화면, 2560×1600, 타일 64, 각 30초 (`docs/research/p4-performance.log`):
+
+| 변경 감지 | 게스트 `kernel_task` | 보낸 양 | 주기 | 비교 시간 |
+| --------- | -------------------- | ------- | ---- | --------- |
+| 끔 | 6.1% | 25,188 MiB (약 840 MiB/s, 전체 전송 약 54회/s) | 전체 | — |
+| 켬 | 24.9% | 0 MiB (부분 1회, 건너뜀 1,425회) | 약 47회/s | 평균 5.2 ms/주기 |
+
+해석: 정지 화면에서 호스트로 가는 전송·FLUSH는 0이 되지만, 게스트는 16 MiB 화면과 shadow를 매 주기 비교하느라 vCPU 한 개의 약 19%를 더 쓴다(메모리 대역 한계, 주기당 32 MiB 읽기).
+
+측정 2 — 같은 조건 반복(사용자 실행): 게스트 6.2% / 25.0%로 같음. 호스트 QEMU CPU는 두 구간 모두 4.2~4.9%로 차이 없음.
+
+결정: 기본값 꺼짐(`VVDirtyFlush=0`). 변경 감지에 가장 유리한 정지 화면에서도 호스트 이득이 보이지 않고 게스트 비용만 늘기 때문이다. 타이핑·동영상은 이득이 더 작으므로 재지 않았다. 정리는 `docs/research/p4-performance.md`.

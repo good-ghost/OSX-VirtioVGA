@@ -94,3 +94,12 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 - 그 밖의 입력(boot-args, Info.plist 값, 펌웨어 콘솔 정보, `setProperties`, IOGraphics 호출)도 정규화·검사가 있다.
 - user client 없음. `IOUserClient.h`는 `clientHasPrivilege`만 쓴다.
 - 표: `docs/research/p5-security-boundary.md`.
+
+### WI-5.006 호환성 점검 (2026-11-25)
+
+- 로드 상태: `as.vit9696.Lilu 1.6.8`, `as.vit9696.WhateverGreen 1.6.7`, VirtioVideo 0.0.41, NdrvBlocker 0.0.2. P2~P4의 모든 시험(모드 전환 10종, HiDPI, 디스플레이 잠자기 10회, 하드웨어 커서)이 이 조합에서 진행됐고 충돌·패닉 없음.
+- WhateverGreen이 이 장치를 건드리지 않는 근거:
+  - Lilu 1.6.8 `kern_devinfo.cpp`: 장치 목록은 vendor Intel·AMD·AMDZEN·VMware·QEMU(0x1234)·NVIDIA만 받는다. virtio-gpu는 0x1af4라 제외된다. 외부 GPU는 PCI 브리지 아래에서만 찾는데 이 장치는 루트 버스(`/_SB/PCI0/S30`)에 있다.
+  - WEG가 외부 GPU에 하는 일(이름 `GFX0`으로 변경, `AAPL,slot-name`, `model`, configRead 후킹)의 흔적이 없다. 장치 이름은 `S30@6`/`display` 그대로다.
+  - `"built-in" = <00>` 속성의 출처는 확인하지 못했다. 위 근거로 WEG 경로는 아니다.
+- macOS 업데이트: 15.8.3(24H241) 최신. `softwareupdate -l`이 주는 것은 macOS Tahoe 26.7.3뿐이라 범위 밖(Q-05)이므로 시험하지 않는다.

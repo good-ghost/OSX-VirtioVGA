@@ -238,7 +238,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-5.003  | 언로드·재로드 가능성 확인                           | 1       |
 | [ ]    | WI-5.004  | 성능 측정                                           | 1       |
 | [X]    | WI-5.005  | 보안 경계 점검                                      | 1       |
-| [ ]    | WI-5.006  | 호환성 점검 (Lilu/WhateverGreen, macOS 15.x)        | 0.5     |
+| [X]    | WI-5.006  | 호환성 점검 (Lilu/WhateverGreen, macOS 15.x)        | 0.5     |
 | [ ]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
 | [ ]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
 | [ ]    | WI-5.009  | 설치·운영 문서와 라이선스                           | 0.5     |
@@ -258,7 +258,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 호스트가 주는 모든 값의 범위 검사 위치를 목록으로 점검했다 (NFR-006) — 16곳 모두 검사 있음, 빠진 곳 없음 (`docs/research/p5-security-boundary.md`)
   - [X] user client가 없음을 확인했다 (NFR-007) — 하위 클래스·`newUserClient`·`IOUserClientClass` 없음. 설정 입구는 root만 받는 `setProperties` 하나
 - WI-5.006
-  - [ ] Lilu·WhateverGreen이 로드된 상태에서 충돌이 없고, WhateverGreen이 이 장치를 건드리지 않음을 확인했다
+  - [X] Lilu·WhateverGreen이 로드된 상태에서 충돌이 없고, WhateverGreen이 이 장치를 건드리지 않음을 확인했다 — Lilu 1.6.8·WEG 1.6.7 로드 상태로 P2~P4 전체(모드 전환·잠자기·커서) 진행. Lilu 장치 분류가 vendor 0x1af4를 제외(소스 확인), GFX0 이름 변경·slot·model 흔적 없음. macOS 15.x 업데이트 없음(제공되는 것은 26.7.3, 범위 밖 Q-05)
 - WI-5.007
   - [ ] AC-07 다섯 항목을 전후로 캡처·측정해 기록했다
 - WI-5.008

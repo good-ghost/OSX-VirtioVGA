@@ -48,6 +48,14 @@ public:
     IOReturn getAttribute(IOSelect attribute, uintptr_t *value) override;
     IOReturn setAttribute(IOSelect attribute, uintptr_t value) override;
     IOReturn getAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t *value) override;
+    // EDID (WI-3.003, REQ-025). GPU 서비스가 검증한 EDID를 128바이트 블록으로 준다.
+    bool hasDDCConnect(IOIndex connectIndex) override;
+    IOReturn getDDCBlock(IOIndex connectIndex, UInt32 blockNumber, IOSelect blockType, IOOptionBits options,
+                         UInt8 *data, IOByteCount *length) override;
+
+    // 디스플레이 변경 이벤트 뒤 GPU 서비스가 부른다 (WI-3.005). 선호 해상도가 바뀌었으면 모드 목록을 다시 만든다.
+    // IOGraphics에 연결 변경을 알려 즉시 다시 읽게 하는 것은 아직 하지 않는다 (창 크기 자동 전환은 WI-6.001).
+    void displayConfigChanged();
 
 private:
     static VirtioGpuDevice *findGpuDevice(IOService *pci);

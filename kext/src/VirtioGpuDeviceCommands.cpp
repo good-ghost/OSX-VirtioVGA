@@ -11,6 +11,7 @@
 #include "VirtioPciTransport.hpp"
 #include "VirtioQueue.hpp"
 #include "vv/GpuCommand.hpp"
+#include "vv/Edid.hpp"
 #include "vv/MemEntries.hpp"
 
 namespace {
@@ -331,3 +332,46 @@ IOReturn VirtioGpuDevice::unrefResource(uint32_t resourceId)
     return sendNodataCommand(&request, sizeof(request), resourceId);
 }
 
+
+void VirtioGpuDevice::queryEdid()
+{
+    v::gpu::GetEdid request{};
+    request.hdr.type = static_cast<uint32_t>(v::gpu::CtrlType::CmdGetEdid);
+    request.scanout = 0;
+    // 응답(1056바이트)은 스택에 두기에 크므로 정적 버퍼를 쓴다. 명령은 게이트로 직렬화되고 이 함수는
+    // start와 확인 thread_call에서만 불리므로 동시에 쓰이지 않는다.
+    static v::gpu::RespEdid response;
+    bzero(&response, sizeof(response));
+    v::gpu::CommandResult result = v::gpu::CommandResult::Ok;
+    sendCommand(&request, sizeof(request), &response, sizeof(response), v::gpu::CtrlType::RespOkEdid, 0, &result);
+    char summary[kSummaryBytes];
+    if (result != v::gpu::CommandResult::Ok) {
+        snprintf(summary, sizeof(summary), "command:%s", v::gpu::commandResultName(result));
+        setProperty("VVEdid", summary);
+        mEdidBytes = 0;
+        return;
+    }
+    const auto check = vv::edid::validate(response.edid, response.size, sizeof(response.edid));
+    if (check != vv::edid::Check::Ok) {
+        snprintf(summary, sizeof(summary), "invalid:%s size=%u", vv::edid::checkName(check), response.size);
+        setProperty("VVEdid", summary);
+        VV_LOG_ERR("gpu: EDID rejected (%s, size %u)", vv::edid::checkName(check), response.size);
+        mEdidBytes = 0;
+        return;
+    }
+    bcopy(response.edid, mEdid, response.size);
+    mEdidBytes = response.size;
+    snprintf(summary, sizeof(summary), "ok size=%u", response.size);
+    setProperty("VVEdid", summary);
+    setProperty("VVEdidData", mEdid, static_cast<unsigned int>(mEdidBytes));
+    VV_LOG_INFO("gpu: EDID %s", summary);
+}
+
+size_t VirtioGpuDevice::copyEdid(uint8_t *out, size_t capacity) const
+{
+    if (out == nullptr || mEdidBytes == 0 || mEdidBytes > capacity) {
+        return 0;
+    }
+    bcopy(mEdid, out, mEdidBytes);
+    return mEdidBytes;
+}

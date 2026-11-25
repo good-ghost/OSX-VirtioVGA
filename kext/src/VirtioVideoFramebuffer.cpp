@@ -7,6 +7,8 @@
 #include "VVDmaBuffer.hpp"
 #include "VVLog.hpp"
 #include "VirtioGpuDevice.hpp"
+#include "vv/Edid.hpp"
+#include "vv/VirtioGpuSpec.hpp"
 
 OSDefineMetaClassAndStructors(VirtioVideoFramebuffer, IOFramebuffer)
 
@@ -353,10 +355,65 @@ IOReturn VirtioVideoFramebuffer::setAttribute(IOSelect attribute, uintptr_t valu
     return IOFramebuffer::setAttribute(attribute, value);
 }
 
+bool VirtioVideoFramebuffer::hasDDCConnect(IOIndex connectIndex)
+{
+    uint8_t edid[vv::virtio::gpu::kMaxEdidBytes];
+    return connectIndex == 0 && mGpu != nullptr && mGpu->copyEdid(edid, sizeof(edid)) > 0;
+}
+
+IOReturn VirtioVideoFramebuffer::getDDCBlock(IOIndex connectIndex, UInt32 blockNumber, IOSelect blockType,
+                                             IOOptionBits, UInt8 *data, IOByteCount *length)
+{
+    trace("getDDCBlock", 0, blockNumber);
+    if (connectIndex != 0 || blockType != kIODDCBlockTypeEDID || data == nullptr || length == nullptr ||
+        blockNumber == 0 || mGpu == nullptr) {
+        return kIOReturnBadArgument;
+    }
+    uint8_t edid[vv::virtio::gpu::kMaxEdidBytes];
+    const size_t size = mGpu->copyEdid(edid, sizeof(edid));
+    const size_t offset = (blockNumber - 1) * vv::edid::kBlockBytes;  // blockNumber는 1부터
+    if (size == 0 || offset + vv::edid::kBlockBytes > size || *length < vv::edid::kBlockBytes) {
+        return kIOReturnUnsupported;
+    }
+    bcopy(edid + offset, data, vv::edid::kBlockBytes);
+    *length = vv::edid::kBlockBytes;
+    return kIOReturnSuccess;
+}
+
+void VirtioVideoFramebuffer::displayConfigChanged()
+{
+    if (mGpu == nullptr || mBuffer == nullptr) {
+        return;
+    }
+    const vv::display::ModeTable updated = vv::display::buildModeTable(mGpu->preferredMode(), mBuffer->length());
+    const vv::display::ModeEntry *preferred = vv::display::findPreferredMode(updated);
+    // 현재 모드가 새 목록에 없으면(예: 이전 선호 해상도 ID 100이 다른 크기로 바뀜) 목록을 바꾸지 않는다.
+    // 현재 화면과 맞지 않는 목록을 보고하지 않기 위해서다. 모드를 바꾸는 것은 WI-6.001에서 다룬다.
+    const vv::display::ModeEntry *current = vv::display::findModeById(updated, static_cast<uint32_t>(mCurrentModeId));
+    if (current == nullptr || !(current->mode == mMode)) {
+        VV_LOG_INFO("fb: display changed, preferred %ux%u; current mode %d not in new list, keeping list",
+                    preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0,
+                    static_cast<int>(mCurrentModeId));
+        trace("displayChanged-kept");
+        return;
+    }
+    mModes = updated;
+    if (preferred != nullptr) {
+        mStartupModeId = static_cast<IODisplayModeID>(preferred->id);
+    }
+    VV_LOG_INFO("fb: display changed, mode list rebuilt (%u modes, preferred %ux%u)", static_cast<unsigned>(mModes.count),
+                preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0);
+    trace("displayChanged-rebuilt");
+}
+
 IOReturn VirtioVideoFramebuffer::getAttributeForConnection(IOIndex connectIndex, IOSelect attribute,
                                                            uintptr_t *value)
 {
     trace("getConn", attribute);
+    if (connectIndex == 0 && attribute == kConnectionSupportsHLDDCSense) {
+        // 헤더 규약: hasDDCConnect·getDDCBlock을 지원하면 값 없이 성공을 돌려준다.
+        return hasDDCConnect(connectIndex) ? kIOReturnSuccess : kIOReturnUnsupported;
+    }
     // 연결(모니터)은 하나이고 항상 켜져 있다. EDID(DDC)는 WI-3.003.
     if (connectIndex == 0 && (attribute == kConnectionEnable || attribute == kConnectionCheckEnable)) {
         if (value != nullptr) {

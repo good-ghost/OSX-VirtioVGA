@@ -15,6 +15,7 @@
 #include "VVLog.hpp"
 #include "VirtioPciTransport.hpp"
 #include "VirtioQueue.hpp"
+#include "VirtioVideoFramebuffer.hpp"
 #include "vv/GpuCommand.hpp"
 #include "vv/PciCapWalk.hpp"
 #include "vv/VirtioFeatures.hpp"
@@ -185,6 +186,7 @@ bool VirtioGpuDevice::start(IOService *provider)
     enableInterrupts();
     startTimers();
     queryDisplayInfo();
+    queryEdid();
     runSelfTest();
     probeContiguousAllocation();
     if (failureInjected(kFailFramebuffer)) {
@@ -327,10 +329,16 @@ void VirtioGpuDevice::giveUpDevice(const char *reason)
 
 void VirtioGpuDevice::deferredDisplayQuery(thread_call_param_t owner, thread_call_param_t)
 {
+    // 복구 뒤 확인(WI-1.006)과 디스플레이 변경 이벤트(WI-3.005)가 같이 쓴다.
     auto *self = static_cast<VirtioGpuDevice *>(owner);
     OSIncrementAtomic(&self->mDisplayQueryActive);
     if (!self->mStopping) {
         self->queryDisplayInfo();
+        if (self->mDisplayChangePending) {
+            self->mDisplayChangePending = false;
+            self->queryEdid();
+            self->notifyDisplayChanged();
+        }
     }
     OSDecrementAtomic(&self->mDisplayQueryActive);
 }
@@ -534,8 +542,15 @@ void VirtioGpuDevice::handleConfigEvent()
     const uint32_t events = mTransport->deviceRead32(offsetof(Gpu, eventsRead));
     if (events != 0) {
         VV_LOG_INFO("gpu: config event 0x%x (display=%d)", events, (events & v::gpu::kEventDisplay) != 0);
-        // §5.7.4: 처리한 비트를 events_clear에 써서 지운다. 디스플레이 정보 재조회는 WI-3.005.
+        // §5.7.4: 처리한 비트를 events_clear에 써서 지운다.
         mTransport->deviceWrite32(offsetof(Gpu, eventsClear), events);
+        if ((events & v::gpu::kEventDisplay) != 0) {
+            // WI-3.005: 워크루프에서는 명령 완료를 기다릴 수 없으므로 display info·EDID 재조회는 thread_call에서 한다.
+            ++mDisplayEvents;
+            setProperty("VVDisplayEvents", mDisplayEvents, 32);
+            mDisplayChangePending = true;
+            thread_call_enter(mDisplayQueryCall);
+        }
         vv::publishLog(this);
     }
 }
@@ -898,4 +913,13 @@ void VirtioGpuDevice::stop(IOService *provider)
         mPci = nullptr;
     }
     IOService::stop(provider);
+}
+
+void VirtioGpuDevice::notifyDisplayChanged()
+{
+    auto *framebuffer = OSDynamicCast(VirtioVideoFramebuffer, mFramebufferClient);
+    if (framebuffer != nullptr) {
+        framebuffer->displayConfigChanged();
+    }
+    vv::publishLog(this);
 }

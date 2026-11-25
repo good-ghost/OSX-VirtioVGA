@@ -68,6 +68,8 @@ public:
     IOReturn changeMode(const vv::display::Mode &mode);
     // 장치가 알려 준 선호 해상도 (WI-3.004).
     vv::display::Mode preferredMode() const { return mPreferredMode; }
+    // 검증을 통과한 EDID를 out에 복사하고 길이를 돌려준다. 없으면 0 (WI-3.003).
+    size_t copyEdid(uint8_t *out, size_t capacity) const;
     // 프레임버퍼 클래스가 붙거나(attached=true) 떨어질 때 알린다 (takeover 확인용).
     void framebufferAttached(IOService *framebuffer, bool attached);
 
@@ -109,6 +111,10 @@ private:
     IOReturn sendNodataCommand(const void *request, uint32_t requestBytes, uint32_t logArg,
                                vv::virtio::gpu::CommandResult *resultOut = nullptr);
     void queryDisplayInfo();
+    // VIRTIO_GPU_CMD_GET_EDID (scanout 0). 검증을 통과하면 mEdid에 둔다 (WI-3.003, REQ-025, NFR-006).
+    void queryEdid();
+    // 디스플레이 변경 이벤트(WI-3.005) 뒤 다시 조회한 정보를 프레임버퍼에 알린다.
+    void notifyDisplayChanged();
     void runSelfTest();
 
     // 2D resource 명령 (WI-2.004). 모두 워크루프 밖에서 부른다.
@@ -205,6 +211,10 @@ private:
     uint32_t mScanoutResourceId = 0;  // 0이면 아직 연결 안 됨 (또는 장치 reset으로 잃음)
     uint32_t mFlushIntervalMs = 0;  // start에서 boot-arg로 정한다 (WI-2.007)
     uint32_t mModeChanges = 0;
+    uint8_t mEdid[vv::virtio::gpu::kMaxEdidBytes] = {};
+    size_t mEdidBytes = 0;
+    uint32_t mDisplayEvents = 0;
+    volatile bool mDisplayChangePending = false;  // config 이벤트(워크루프)가 세우고 확인 thread_call이 처리한다
     bool mBootScreenCopied = false;  // 부트 화면은 첫 scanout에서 한 번만 복사한다
     uint32_t mFlushes = 0;
     uint32_t mFlushErrors = 0;

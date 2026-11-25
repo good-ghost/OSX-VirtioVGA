@@ -127,3 +127,22 @@ WI-3.005 (WI-3.004 이후)
 - "Kernel Extension Info" 줄은 드라이버 적용 뒤 표시되지 않는다 (REQ-062, S). 원인 미조사.
 - 메모리: 128 MiB를 wired로 점유 (Q-03 결정대로).
 - 캡처: `docs/screenshots/p3/2026-11-24-p3-2560x1600-hidpi.png` (2560×1600).
+
+### WI-3.003·3.005 (2026-11-24, kext 0.0.29, 호스트 virtio-vga-gl + gtk,gl=on)
+
+| 확인 | 적용 전 | 0.0.29 |
+| ---- | ------- | ------ |
+| `VVEdid` | — | `ok size=1024` (QEMU가 1024바이트를 줌, 모든 블록 체크섬 통과) |
+| IOGraphics 호출 | — | `getConn(hddc)` 성공, `getDDCBlock` 2회 |
+| 디스플레이 이름 (system_profiler) | (없음) | **QEMU Monitor** |
+| AppleDisplay VendorID / ProductID | 1970170734(대체값) / 1815 | **18708(0x4914) / 4660(0x1234)** |
+| 배경 저장소 디스플레이 키 | `FFFFFFFF-…`만 | **`2043E827-27F6-C3E9-C3EF-99363AC7F093` 추가** (예전 키도 남아 있음) |
+| 디스플레이 이벤트 | — | `VVDisplayEvents = 2`, 모드 목록 재구성 1회(`displayChanged-rebuilt`) |
+| 기타 | | VRAM 128 MB, 2560×1600 유지, flush 오류 0, 패닉 없음 |
+
+판단
+
+- EDID 제공으로 macOS가 모니터를 식별한다. 처음 문제였던 "배경 저장소 키가 `FFFFFFFF-…`"(REQUIREMENT §2.5)가 실제 키로 바뀌었다. 사진 배경 설정이 저장·유지되는지는 따로 확인하지 않았다 (Sequoia 배경은 Metal이 필요해 여전히 범위 밖).
+- 이벤트 처리는 모드 목록까지 갱신한다. IOGraphics에 바로 알려 해상도를 자동으로 바꾸는 것은 WI-6.001.
+
+P3(WI-3.001~3.009) 완료.

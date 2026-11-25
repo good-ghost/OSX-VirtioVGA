@@ -237,7 +237,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-5.002  | 모드 전환 100회·누수 시험                           | 1       |
 | [ ]    | WI-5.003  | 언로드·재로드 가능성 확인                           | 1       |
 | [ ]    | WI-5.004  | 성능 측정                                           | 1       |
-| [ ]    | WI-5.005  | 보안 경계 점검                                      | 1       |
+| [X]    | WI-5.005  | 보안 경계 점검                                      | 1       |
 | [ ]    | WI-5.006  | 호환성 점검 (Lilu/WhateverGreen, macOS 15.x)        | 0.5     |
 | [ ]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
 | [ ]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
@@ -255,8 +255,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [ ] 1920×1080에서 CPU 사용률 증가분을 측정했다 (목표: 한 코어의 10% 이하, NFR-004)
   - [ ] 마우스·창 드래그 지연을 IONDRV와 녹화로 비교했다 (NFR-005)
 - WI-5.005
-  - [ ] 호스트가 주는 모든 값의 범위 검사 위치를 목록으로 점검했다 (NFR-006)
-  - [ ] user client가 없음을 확인했다 (NFR-007)
+  - [X] 호스트가 주는 모든 값의 범위 검사 위치를 목록으로 점검했다 (NFR-006) — 16곳 모두 검사 있음, 빠진 곳 없음 (`docs/research/p5-security-boundary.md`)
+  - [X] user client가 없음을 확인했다 (NFR-007) — 하위 클래스·`newUserClient`·`IOUserClientClass` 없음. 설정 입구는 root만 받는 `setProperties` 하나
 - WI-5.006
   - [ ] Lilu·WhateverGreen이 로드된 상태에서 충돌이 없고, WhateverGreen이 이 장치를 건드리지 않음을 확인했다
 - WI-5.007

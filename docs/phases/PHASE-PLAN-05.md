@@ -85,3 +85,12 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 - 시연 녹화: 부팅 → 모드 전환 → HiDPI → 디스플레이 잠자기·로그인 (`docs/movie/m3-demo.mov`, 자막, 화면 전환 1.5초 / 입력 0.3~0.5초 간격).
 
 > 도구와 수치는 계획 단계의 스케치다. 실측과 사용자 승인이 우선한다.
+
+## 결정 기록
+
+### WI-5.005 보안 경계 점검 (2026-11-25)
+
+- 호스트가 주는 값 16곳(캡 목록·BAR·MMIO offset·큐 수·큐 크기·notify_off·MSI-X 벡터·device_status·used id·used len·응답 type·num_scanouts·해상도·EDID·events_read·ISR)을 모두 확인했다. 모두 쓰기 전에 범위 검사를 받는다. 고칠 곳 없음.
+- 그 밖의 입력(boot-args, Info.plist 값, 펌웨어 콘솔 정보, `setProperties`, IOGraphics 호출)도 정규화·검사가 있다.
+- user client 없음. `IOUserClient.h`는 `clientHasPrivilege`만 쓴다.
+- 표: `docs/research/p5-security-boundary.md`.

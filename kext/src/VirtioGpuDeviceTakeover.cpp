@@ -169,6 +169,8 @@ void VirtioGpuDevice::restoreNdrv(const char *reason)
     if (mPci == nullptr || mPci->getProperty(kIgnoreNdrvProperty) == nullptr) {
         return;
     }
+    // 보조 kext가 재매칭 때 다시 막지 않도록 표시를 먼저 남긴다.
+    mPci->setProperty(vv::kNdrvHandedBackProperty, kOSBooleanTrue);
     mPci->removeProperty(kIgnoreNdrvProperty);
     char state[kSummaryBytes];
     snprintf(state, sizeof(state), "restored:%s", reason);

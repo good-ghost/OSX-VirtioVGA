@@ -14,4 +14,8 @@ bool isDriverDisabledByBootArg();
 // OpenCore DeviceProperties로 넣어 부팅 때부터 IONDRV가 붙지 않게 하고, 우리 프레임버퍼가 붙는다.
 inline constexpr const char *kIgnoreNdrvProperty = "AAPL,iokit-ignore-ndrv";
 
+// 본 kext가 시작에 실패해 IONDRV에 화면을 돌려줄 때 PCI 장치에 남기는 표시 (WI-2.008).
+// 재매칭 때 보조 kext가 다시 probe되므로, 이 표시가 있으면 속성을 다시 붙이지 않는다 (2026-11-24 실측한 경쟁 조건).
+inline constexpr const char *kNdrvHandedBackProperty = "VVNdrvHandedBack";
+
 } // namespace vv

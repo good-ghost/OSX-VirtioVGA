@@ -33,6 +33,10 @@ IOService *VirtioVideoNdrvBlocker::probe(IOService *provider, SInt32 *)
         provider->setProperty("VVNdrvBlocked", "skipped:-vvideooff");
         return nullptr;
     }
+    if (provider->getProperty(vv::kNdrvHandedBackProperty) != nullptr) {
+        // 본 kext가 실패해 IONDRV에 화면을 돌려준 뒤의 재매칭이다. 다시 막지 않는다.
+        return nullptr;
+    }
     provider->setProperty(vv::kIgnoreNdrvProperty, kOSBooleanTrue);
     provider->setProperty("VVNdrvBlocked", "set");
     return nullptr;

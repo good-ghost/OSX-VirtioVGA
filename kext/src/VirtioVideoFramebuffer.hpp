@@ -48,6 +48,10 @@ public:
     IOReturn getAttribute(IOSelect attribute, uintptr_t *value) override;
     IOReturn setAttribute(IOSelect attribute, uintptr_t value) override;
     IOReturn getAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t *value) override;
+    // 디스플레이 잠자기는 IODisplay 전원 변경 → 연결 속성 설정 경로로 온다 (KDK: IODisplay::setPowerState가
+    // 디스플레이 파라미터를 바꾼다). setAttribute(kIOPowerAttribute)는 디스플레이 잠자기 때 오지 않았다
+    // (0.0.31 실측, WI-4.002). 어떤 선택자가 오는지 VVFbPowerTrace에 남긴다(진단용).
+    IOReturn setAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t value) override;
     // EDID (WI-3.003, REQ-025). GPU 서비스가 검증한 EDID를 128바이트 블록으로 준다.
     bool hasDDCConnect(IOIndex connectIndex) override;
     IOReturn getDDCBlock(IOIndex connectIndex, UInt32 blockNumber, IOSelect blockType, IOOptionBits options,
@@ -68,6 +72,12 @@ private:
     // IONDRVFramebuffer도 자기 initForPM()에서 직접 한다 (KDK 심볼 확인). 하지 않으면 디스플레이 잠자기 때
     // setAttribute(kIOPowerAttribute)가 오지 않는다 (0.0.30 실측).
     void initForPM();
+    // 전원·연결 속성 설정 기록. VVFbTrace는 앞부분만 남기므로 부팅 뒤 이벤트를 보려고 따로 최근 것만 둔다.
+    void tracePower(const char *what, IOIndex connectIndex, uint32_t selector, uint64_t value);
+    static constexpr uint32_t kPowerTraceEntries = 24;
+    static constexpr size_t kPowerTraceEntryBytes = 32;
+    char mPowerTrace[kPowerTraceEntries][kPowerTraceEntryBytes] = {};
+    uint32_t mPowerTraceCount = 0;
     bool mPMInitialized = false;
     uintptr_t mPowerState = 0;  // IOGraphics가 setAttribute(kIOPowerAttribute)로 준 마지막 값
     uint32_t mTraceEntries = 0;

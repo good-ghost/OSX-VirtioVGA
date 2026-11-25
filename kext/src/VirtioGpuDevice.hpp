@@ -215,6 +215,8 @@ private:
     uint32_t mFlushIntervalMs = 0;  // start에서 boot-arg로 정한다 (WI-2.007)
     uint32_t mModeChanges = 0;
     volatile bool mFlushPaused = false;  // 디스플레이가 꺼져 있는 동안 true
+    uint32_t mScanoutBlanks = 0;         // 디스플레이 잠자기로 scanout을 끊은 횟수 (진단)
+    bool mScanoutBlanked = false;        // 디스플레이 잠자기로 scanout을 끊어 둔 상태 (전송 루프만 바꾼다)
     uint32_t mDisplaySleeps = 0;
     uint32_t mDisplayWakes = 0;
     uint8_t mEdid[vv::virtio::gpu::kMaxEdidBytes] = {};

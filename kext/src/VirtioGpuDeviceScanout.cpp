@@ -65,8 +65,8 @@ void VirtioGpuDevice::framebufferAttached(IOService *framebuffer, bool attached)
 void VirtioGpuDevice::publishScanout(const char *state)
 {
     char summary[kSummaryBytes];
-    snprintf(summary, sizeof(summary), "%s resource=%u setups=%u flushes=%u flush-errors=%u", state,
-             mScanoutResourceId, mScanoutSetups, mFlushes, mFlushErrors);
+    snprintf(summary, sizeof(summary), "%s resource=%u setups=%u flushes=%u flush-errors=%u blanks=%u", state,
+             mScanoutResourceId, mScanoutSetups, mFlushes, mFlushErrors, mScanoutBlanks);
     setProperty("VVScanout", summary);
 }
 
@@ -87,6 +87,7 @@ bool VirtioGpuDevice::setUpScanoutResource()
         return false;
     }
     mScanoutResourceId = resourceId;
+    mScanoutBlanked = false;  // 방금 SET_SCANOUT으로 연결했다
     ++mScanoutSetups;
     VV_LOG_INFO("gpu: scanout %u -> resource %u (%ux%u)", kScanoutId, resourceId, mode.width, mode.height);
     return true;
@@ -279,13 +280,43 @@ void VirtioGpuDevice::runFlushLoop()
             sinceRetry += interval;
             continue;
         }
+        const vv::display::Mode mode = mFramebufferMode;
         if (mFlushPaused) {
-            // 디스플레이가 꺼져 있다 (WI-4.002). 화면을 보낼 필요가 없으므로 전송하지 않고 쉰다.
-            // 다시 켜지면 다음 주기에 전체 화면을 보낸다.
+            // 디스플레이가 꺼져 있다 (WI-4.002). 전송을 멈추고 scanout을 끊는다(resource 0). virtio-gpu에는
+            // 화면 끄기 명령이 없어서, 끊지 않으면 호스트 창에 마지막 화면이 그대로 남는다 (0.0.33 실측).
+            if (!mScanoutBlanked) {
+                const IOReturn blanked = setScanout(kScanoutId, 0, mode);
+                mScanoutBlanked = blanked == kIOReturnSuccess;
+                VV_LOG_INFO("gpu: scanout %u disabled for display sleep -> 0x%x", kScanoutId, blanked);
+                if (mScanoutBlanked) {
+                    ++mScanoutBlanks;
+                    publishScanout("blanked");
+                    vv::publishLog(this);
+                } else {
+                    ++mFlushErrors;
+                    VV_LOG_ERR("gpu: scanout disable for display sleep failed");
+                }
+            }
             IOSleep(kPausedPollMs);
             continue;
         }
-        const vv::display::Mode mode = mFramebufferMode;
+        if (mScanoutBlanked) {
+            // 깨어났다. 같은 resource를 다시 연결하고, 아래에서 전체 화면을 보낸다.
+            const IOReturn restored = setScanout(kScanoutId, mScanoutResourceId, mode);
+            VV_LOG_INFO("gpu: scanout %u -> resource %u after display wake -> 0x%x", kScanoutId, mScanoutResourceId,
+                        restored);
+            if (restored == kIOReturnSuccess) {
+                mScanoutBlanked = false;
+                publishScanout("running");
+                vv::publishLog(this);
+            } else {
+                ++mFlushErrors;
+                VV_LOG_ERR("gpu: scanout re-enable after display sleep failed, recreating resource");
+                tearDownScanoutResource(false);
+                sinceRetry = kResourceRetryMs;
+                continue;
+            }
+        }
         if (transferToHost(mScanoutResourceId, mode) != kIOReturnSuccess ||
             flushResource(mScanoutResourceId, mode) != kIOReturnSuccess) {
             ++mFlushErrors;

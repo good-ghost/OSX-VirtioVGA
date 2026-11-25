@@ -17,6 +17,7 @@ namespace {
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
 // 전원 상태 (IONDRVFramebuffer와 같은 3단계).
 constexpr unsigned long kPowerStateCount = 3;
+constexpr unsigned long kPowerStateIdle = 1;
 constexpr unsigned long kPowerStateOn = 2;
 // 깊이(색 형식)는 32bpp 하나뿐이다. 모드 ID는 vv/ModeTable.hpp가 정한다(1부터, 재부팅 간 고정).
 constexpr IOIndex kOnlyDepth = 0;
@@ -111,6 +112,24 @@ void VirtioVideoFramebuffer::trace(const char *what, uint32_t selector, uint64_t
     setProperty("VVFbTrace", joined);
 }
 
+void VirtioVideoFramebuffer::tracePower(const char *what, IOIndex connectIndex, uint32_t selector, uint64_t value)
+{
+    char name[5];
+    selectorName(selector, name);
+    snprintf(mPowerTrace[mPowerTraceCount % kPowerTraceEntries], kPowerTraceEntryBytes, "%s%d(%s)=%llu", what,
+             static_cast<int>(connectIndex), name, value);
+    ++mPowerTraceCount;
+    // 오래된 것부터 공백으로 이어 붙인다. 앞에 총 개수를 둬서 빠진 항목이 있는지 알 수 있게 한다.
+    char joined[kPowerTraceEntries * kPowerTraceEntryBytes + 16];
+    int used = snprintf(joined, sizeof(joined), "n=%u", mPowerTraceCount);
+    const uint32_t kept = mPowerTraceCount < kPowerTraceEntries ? mPowerTraceCount : kPowerTraceEntries;
+    for (uint32_t i = 0; i < kept && used > 0 && static_cast<size_t>(used) < sizeof(joined); ++i) {
+        const uint32_t slot = (mPowerTraceCount - kept + i) % kPowerTraceEntries;
+        used += snprintf(joined + used, sizeof(joined) - used, " %s", mPowerTrace[slot]);
+    }
+    setProperty("VVFbPowerTrace", joined);
+}
+
 bool VirtioVideoFramebuffer::start(IOService *provider)
 {
     mGpu = findGpuDevice(provider);
@@ -157,7 +176,11 @@ void VirtioVideoFramebuffer::initForPM()
     PMinit();
     getProvider()->joinPMtree(this);
     const IOReturn registered = registerPowerDriver(this, powerStates, kPowerStateCount);
-    changePowerStateTo(kPowerStateOn);
+    // IONDRVFramebuffer::initForPM과 같게: 디스플레이(자식)가 붙을 때까지 clamp로 켜 두고, 자기 요구는 1(대기)로
+    // 둔다. 그러면 켜짐(2)은 자식 IODisplay의 요구로만 유지되고 디스플레이 잠자기 때 1로 내려간다.
+    // 0.0.31·0.0.32는 changePowerStateTo(2)로 고정해서 디스플레이 잠자기에도 상태가 내려가지 않았다 (WI-4.002).
+    temporaryPowerClampOn();
+    changePowerStateTo(kPowerStateIdle);
     mPMInitialized = true;
     trace("initForPM", 0, static_cast<uint32_t>(registered));
     VV_LOG_INFO("fb: power management registered -> 0x%x", registered);
@@ -375,13 +398,17 @@ IOReturn VirtioVideoFramebuffer::getAttribute(IOSelect attribute, uintptr_t *val
 IOReturn VirtioVideoFramebuffer::setAttribute(IOSelect attribute, uintptr_t value)
 {
     trace("set", attribute, value);
+    if (attribute == kIOPowerAttribute || attribute == kIOPowerStateAttribute) {
+        tracePower("set", -1, attribute, value);
+    }
+    if (attribute == kIOPowerStateAttribute && mGpu != nullptr) {
+        // 프레임버퍼 전원 단계(0·1·2). 2(사용 가능)보다 낮으면 디스플레이가 꺼진 것이다.
+        mGpu->setDisplayPowered(value >= kPowerStateOn);
+    }
     if (attribute == kIOPowerAttribute) {
-        // IOFramebuffer가 전원 상태를 바꿀 때 하위 클래스에 알린다. virtio-gpu에는 전원 명령이 없으므로
-        // 값을 기억하고, 0(꺼짐)이면 주기 전송을 멈춘다 (WI-4.002, REQ-053). 0보다 크면 다시 보낸다.
+        // 값만 기억한다. 켜고 끄는 판단은 위의 'pwrs'(전원 단계)로만 한다: 디스플레이 잠자기 때 IOFramebuffer는
+        // pwrs=1 다음에 powr=1을 보내므로, powr≠0을 켜짐으로 보면 끈 직후 다시 켜 버린다 (0.0.35 실측, WI-4.002).
         mPowerState = value;
-        if (mGpu != nullptr) {
-            mGpu->setDisplayPowered(value != 0);
-        }
         return kIOReturnSuccess;
     }
     return IOFramebuffer::setAttribute(attribute, value);
@@ -436,6 +463,13 @@ void VirtioVideoFramebuffer::displayConfigChanged()
     VV_LOG_INFO("fb: display changed, mode list rebuilt (%u modes, preferred %ux%u)", static_cast<unsigned>(mModes.count),
                 preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0);
     trace("displayChanged-rebuilt");
+}
+
+IOReturn VirtioVideoFramebuffer::setAttributeForConnection(IOIndex connectIndex, IOSelect attribute,
+                                                           uintptr_t value)
+{
+    tracePower("setConn", connectIndex, attribute, value);
+    return IOFramebuffer::setAttributeForConnection(connectIndex, attribute, value);
 }
 
 IOReturn VirtioVideoFramebuffer::getAttributeForConnection(IOIndex connectIndex, IOSelect attribute,

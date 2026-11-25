@@ -1,0 +1,41 @@
+## start 2026-11-25 02:10:47
+uptime: 2:10  up 1 min, 2 users, load averages: 185.29 49.75 18.36
+kext: (0.0.42)
+panic-reports: 5 latest=Kernel-2026-11-24-054128.panic
+classes: VirtioGpuDevice = 1, VirtioVideoFramebuffer = 1, VirtioQueue = 2, VVDmaBuffer = 6
+wired-pages: 459388
+  "VVCurrentMode" = "2560x1600 changes=1"
+  "VVEventCounters" = "interrupts=5961 config=2 controlq=5627 cursorq=334 completions=5627/348 device-errors=0 commands=5628 timeouts=0 errors=1 recoveries=0"
+  "VVCursor" = "resource=2 images=8 moves=333 hides=10 drops=0 rejects=0 visible=1 hot=8,8 scale=50"
+  "VVScanout" = "running resource=3 setups=2 flushes=2852 flush-errors=0 blanks=0"
+  "VVInitResult" = "driver-ok"
+## end 2026-11-25 02:11:49
+uptime: 2:11  up 2 mins, 2 users, load averages: 73.64 42.42 17.76
+kext: (0.0.42)
+panic-reports: 5 latest=Kernel-2026-11-24-054128.panic
+classes: VirtioGpuDevice = 1, VirtioVideoFramebuffer = 1, VirtioQueue = 2, VVDmaBuffer = 6
+wired-pages: 476521
+  "VVCurrentMode" = "2560x1600 changes=1"
+  "VVEventCounters" = "interrupts=12567 config=2 controlq=11925 cursorq=647 completions=11925/687 device-errors=0 commands=11925 timeouts=0 errors=1 recoveries=0"
+  "VVCursor" = "resource=2 images=34 moves=645 hides=11 drops=0 rejects=0 visible=1 hot=8,8 scale=50"
+  "VVScanout" = "running resource=3 setups=2 flushes=5952 flush-errors=0 blanks=0"
+  "VVInitResult" = "driver-ok"
+note: end 기록 시점의 게스트 시각 02:11:49, 가동 2분 — start 뒤 게스트에서 약 1분만 흘렀다(flush 2852 → 5952). 12시간 사용으로 볼 수 없어 무효로 둔다.
+note: 2026-11-25 02:12:30 사용자 결정으로 시험 계속. 시작 기록은 02:10:47 그대로, 종료 기록은 14:11 이후.
+## end 2026-11-25 14:28:10
+uptime: 14:28  up 12:19, 2 users, load averages: 5.02 3.57 3.17
+kext: (0.0.42)
+panic-reports: 5 latest=Kernel-2026-11-24-054128.panic
+classes: VirtioGpuDevice = 1, VirtioVideoFramebuffer = 1, VirtioQueue = 2, VVDmaBuffer = 6
+wired-pages: 535828
+  "VVDisplayPower" = "on sleeps=3 wakes=3"
+  "VVCurrentMode" = "2560x1600 changes=1"
+  "VVEventCounters" = "interrupts=279127 config=2 controlq=276091 cursorq=3080 completions=276091/3210 device-errors=0 commands=276091 timeouts=0 errors=1 recoveries=0"
+  "VVCursor" = "resource=2 images=128 moves=3069 hides=20 drops=0 rejects=0 visible=1 hot=8,8 scale=50"
+  "VVScanout" = "running resource=3 setups=2 flushes=138012 flush-errors=0 blanks=3"
+  "VVInitResult" = "driver-ok"
+note: 가동 12:19(02:09 부팅). 새 패닉 보고서 없음(최신은 여전히 2026-11-24-054128), DiagnosticReports에 02:10 이후 새 파일 없음.
+note: 시작 대비 flush-errors 0, timeouts 0, device-errors 0, recoveries 0, errors 1(부팅 때 값 그대로), 객체 수 변화 없음, cursor drops/rejects 0.
+note: wired-pages 459388 -> 535828(+76440, 약 299 MiB). 드라이버 객체·VVDmaBuffer 수는 그대로라 드라이버 누수로 보지 않으나 원인은 확인하지 못함.
+note: pmset 로그 기준 디스플레이 꺼짐 02:30-02:40, 02:53-03:51, 04:01-14:27. 화면이 켜져 사용된 시간은 약 43분(flush 138012 / 약 53회/초와 일치). 나머지 약 11.5시간은 디스플레이 잠자기 상태.
+note: 2026-11-25 사용자 결정으로 이 결과를 한계와 함께 인정, WI-5.001 완료.

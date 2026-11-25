@@ -69,6 +69,9 @@ public:
     // 디스플레이 잠자기(WI-4.002, REQ-053): 꺼지면 주기 전송을 멈추고, 켜지면 다시 시작한다.
     // 프레임버퍼 클래스가 IOGraphics 전원 속성(kIOPowerAttribute)을 받을 때 부른다.
     void setDisplayPowered(bool powered);
+    // 프레임버퍼 전원 단계가 바뀔 때 장치 상태를 로그로 남긴다 (WI-4.003 진단). 시스템 잠자기(0)에서 깨어난 뒤
+    // QEMU가 virtio 장치를 reset했는지(device_status·queue_enable) PCI 명령 레지스터가 복원됐는지 본다.
+    void noteFramebufferPowerState(unsigned long state);
     // 장치가 알려 준 선호 해상도 (WI-3.004).
     vv::display::Mode preferredMode() const { return mPreferredMode; }
     // 검증을 통과한 EDID를 out에 복사하고 길이를 돌려준다. 없으면 0 (WI-3.003).

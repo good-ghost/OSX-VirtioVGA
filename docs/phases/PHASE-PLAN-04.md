@@ -85,3 +85,17 @@ WI-4.002를 먼저 한다. 사용자가 매일 겪는 동작이기 때문이다.
 제약:
 - 스크린샷에는 바탕화면과 메뉴 막대만 있고 창은 없다. 터미널에 화면 기록 권한이 없을 때 `screencapture`가 창을 빼고 찍는 동작이다. 해상도·렌더링 확인 근거로만 쓴다.
 - 녹화(`docs/movie/p4-display-sleep.mov`)는 만들지 못했다. 게스트 `screencapture -V`가 실패한다(WI-2.007과 같은 제약). 호스트 녹화가 필요하다.
+
+### WI-4.003 시스템 잠자기 요청 (2026-11-24)
+
+| 버전 | 시험 | 결과 |
+| ---- | ---- | ---- |
+| 0.0.31 | (의도하지 않음) `pmset sleep 1` 상태에서 Idle Sleep 진입 21:26:00 | VM이 키 입력으로 깨어나지 않아 사용자가 재시작. 패닉 보고서 없음. 깨어난 뒤 동작은 보지 못함 |
+| 0.0.36 | 시험 전 상태: `VVDisplayPower on sleeps=11 wakes=11`, `VVScanout running resource=2 … flush-errors=0 blanks=11`, `VVInitResult driver-ok` | 사용자 시험: `pmset sleepnow`. GTK 메뉴에 QEMU 모니터가 없어 `system_wakeup`을 못 했다. pmset 로그: `23:15:39 Entering Sleep (Software Sleep)` → `23:17:32 DarkWake` → `23:17:35 FullWake, Display is turned on` → `23:18:16 power button > 4 sec`(사용자 재시작). **시스템은 스스로 깨어났고 패닉 보고서는 없다.** 깨어난 뒤 화면·드라이버 상태는 재시작으로 지워져 확인하지 못했다 |
+| 0.0.37 | 진단: 프레임버퍼 전원 단계가 바뀔 때마다 PCI 명령 레지스터, virtio `device_status`, controlq `queue_enable`을 로그에 남긴다. 깨어난 뒤 QEMU가 장치를 reset했는지 판단한다 | 사용자 시험: `pmset sleepnow` → `23:25:03 DarkWake` → `23:25:33 Entering Sleep`. 이후 깨어남 기록 없음, 키 입력으로 깨어나지 않음, 원격 접속 불가 → `23:32:59` 강제 재시작. 패닉 보고서 없음. 깨어나지 않았으므로 진단 로그는 얻지 못했다 |
+
+정리:
+- 잠들기(시스템 잠자기 요청 응답)는 2회 모두 패닉 없이 진행됐다.
+- 깨어나기는 이 환경에서 시험할 수단이 없다. 키 입력은 S3의 QEMU VM을 깨우지 못하고(2회 중 1회는 23:17:32에 스스로 깨어났으나 원인 불명), GTK 메뉴에 QEMU 모니터가 없어 `system_wakeup`을 보낼 수 없다. 사용자는 시스템 잠자기를 쓰지 않는다(`sleep 0`, Q-04).
+
+결정(2026-11-24, 사용자): 잠들기 패닉 없음으로 WI-4.003을 닫고 깨어나기는 미시험으로 남긴다. 깨어나기를 시험하려면 호스트 QEMU 실행 옵션에 모니터(`-monitor stdio` 등)를 추가해 `system_wakeup`을 보낸다. 0.0.37의 전원 단계 진단 로그는 그대로 둔다.

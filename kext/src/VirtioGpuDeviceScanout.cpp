@@ -12,10 +12,12 @@
 
 #include <IOKit/IOMemoryDescriptor.h>
 #include <IOKit/IOPlatformExpert.h>
+#include <IOKit/pci/IOPCIDevice.h>
 #include <libkern/OSAtomic.h>
 #include <pexpert/pexpert.h>
 
 #include "VVDmaBuffer.hpp"
+#include "VirtioPciTransport.hpp"
 #include "VVLog.hpp"
 
 namespace {
@@ -184,6 +186,16 @@ void VirtioGpuDevice::stopScanout()
     }
     publishScanout("stopped");
     VV_LOG_INFO("gpu: scanout stopped");
+    vv::publishLog(this);
+}
+
+void VirtioGpuDevice::noteFramebufferPowerState(unsigned long state)
+{
+    const uint16_t command = mPci != nullptr ? mPci->configRead16(kIOPCIConfigCommand) : 0;
+    const uint8_t status = mTransport != nullptr ? mTransport->status() : 0;
+    const bool queueOn = mTransport != nullptr && mTransport->isQueueEnabled(0);
+    VV_LOG_INFO("gpu: fb power state %lu pci-cmd=0x%04x dev-status=0x%02x ctrlq=%d", state, command, status,
+                queueOn ? 1 : 0);
     vv::publishLog(this);
 }
 

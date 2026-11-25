@@ -403,6 +403,7 @@ IOReturn VirtioVideoFramebuffer::setAttribute(IOSelect attribute, uintptr_t valu
     }
     if (attribute == kIOPowerStateAttribute && mGpu != nullptr) {
         // 프레임버퍼 전원 단계(0·1·2). 2(사용 가능)보다 낮으면 디스플레이가 꺼진 것이다.
+        mGpu->noteFramebufferPowerState(value);
         mGpu->setDisplayPowered(value >= kPowerStateOn);
     }
     if (attribute == kIOPowerAttribute) {

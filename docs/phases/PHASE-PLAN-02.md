@@ -360,6 +360,15 @@ personality 초안:
 - GL 백엔드에서는 장치가 호스트 창 크기를 선호 해상도로 주고 디스플레이 변경 이벤트를 보낸다. P3의 WI-3.005(이벤트 처리)와 P6의 WI-6.001(창 크기 자동 전환)을 이 구성에서 시험할 수 있다.
 - 선호 해상도가 펌웨어 화면과 다르면 부트 화면 복사가 빠진다. 크기를 맞춰 늘리거나 가운데 배치하는 처리는 필요하면 나중에 넣는다.
 
+### WI-2.008 실패 주입 1·3단계 (2026-11-24, kext 0.0.25, NdrvBlocker 0.0.2, 호스트 virtio-vga-gl)
+
+| boot-arg | `VVInitResult` | `VVNdrvBlocked` | 화면 |
+| -------- | -------------- | --------------- | ---- |
+| `vvideo_fail=1` | `injected:transport` | `restored:injected:transport`, `VVNdrvHandedBack = Yes` | IONDRV 1280×800 Online |
+| `vvideo_fail=3` | `driver-ok` (장치는 정상), `VVFramebuffer = injected-failure` | `restored:injected:framebuffer` | IONDRV 1280×800 Online |
+
+세 단계(1·2·3) 모두 IONDRV로 돌아오고, 보조 kext가 다시 막지 않으며, 패닉이 없다. WI-2.008 완료 (AC-05, AC-06).
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

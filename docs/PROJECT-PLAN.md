@@ -135,7 +135,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [ ]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
 | [ ]    | WI-2.008  | 실패 경로와 자원 해제                               | 1       |
 | [ ]    | WI-2.009  | 부트 화면 이어받기                                  | 1       |
-| [ ]    | WI-2.010  | virtio-vga-gl 호환 시험                             | 0.5     |
+| [X]    | WI-2.010  | virtio-vga-gl 호환 시험                             | 0.5     |
 
 - WI-2.001
   - [X] 명령 제출이 한 번에 하나씩 직렬화된다 (IOCommandGate + 진행 중 명령 1개, 워크루프 스레드 호출은 거절)
@@ -166,7 +166,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 - WI-2.009
   - [ ] 드라이버가 화면을 넘겨받을 때 Apple 로고·진행 막대가 끊기지 않거나, 끊김이 1회 이내임을 녹화로 확인했다
 - WI-2.010
-  - [ ] `-device virtio-vga-gl` + `-display gtk,gl=on`에서 2D 출력이 되는지 시험하고 결과를 기록했다
+  - [X] `-device virtio-vga-gl` + `-display gtk,gl=on`에서 2D 출력이 되는지 시험하고 결과를 기록했다 (2026-11-24, kext 0.0.25: VIRGL 제공·미협상, 1600×1000 출력, flush 오류 0)
 
 ### P3. 모드와 VRAM — [PHASE-PLAN-03](phases/PHASE-PLAN-03.md)
 

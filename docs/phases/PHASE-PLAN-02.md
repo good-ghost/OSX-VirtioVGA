@@ -339,6 +339,27 @@ personality 초안:
 
 남은 것: 실패 주입 1·3단계, 창 이동 녹화(호스트), 부팅 중 화면 끊김 육안 확인(WI-2.009), WI-2.010.
 
+### WI-2.010 virtio-vga-gl 호환 시험 (2026-11-24, kext 0.0.25) — 통과
+
+호스트: `-device virtio-vga-gl`, `-display gtk,gl=on` (사용자가 변경). boot-args `keepsyms=1`.
+
+| 확인 | 결과 |
+| ---- | ---- |
+| 장치 제공 feature | `0x10130000013` = VIRGL, EDID, CONTEXT_INIT, INDIRECT_DESC, EVENT_IDX, VERSION_1, RING_RESET (virtio-vga 때와 달리 VIRGL·CONTEXT_INIT·RING_RESET이 추가됨) |
+| 협상 feature | `0x100000002` = VERSION_1, EDID — **VIRGL·CONTEXT_INIT은 협상하지 않음** (REQ-027) |
+| display info | **`0:1600x1000`** — GL 백엔드는 호스트 창 크기를 선호 해상도로 알려 준다 (virtio-vga + GTK 비 GL에서는 1280×800 기본값) |
+| config 이벤트 | 부팅 중 `config event 0x1 (display=1)` 1회 수신. virtio-vga + GTK(비 GL)에서는 창 크기를 바꿔도 이벤트가 없었다(WI-1.005) |
+| 프레임버퍼·출력 | 1600×1000, 6,402,048바이트 물리 연속, scanout `running … flushes=6014 flush-errors=0`, 시간 초과 0 |
+| 시스템 정보 | Resolution 1600×1000, Online, VRAM 6 MB(프레임버퍼 크기) |
+| 부트 화면 복사 | `skipped:mode-mismatch` — 펌웨어 화면(1280×800)과 프레임버퍼(1600×1000) 크기가 달라 복사하지 않음 (WI-2.009의 알려진 제한) |
+| 패닉 | 없음 |
+
+설계에 반영할 사실
+
+- `virtio-vga-gl`에서도 2D 경로가 그대로 동작한다 (REQ-007 충족).
+- GL 백엔드에서는 장치가 호스트 창 크기를 선호 해상도로 주고 디스플레이 변경 이벤트를 보낸다. P3의 WI-3.005(이벤트 처리)와 P6의 WI-6.001(창 크기 자동 전환)을 이 구성에서 시험할 수 있다.
+- 선호 해상도가 펌웨어 화면과 다르면 부트 화면 복사가 빠진다. 크기를 맞춰 늘리거나 가운데 배치하는 처리는 필요하면 나중에 넣는다.
+
 (이후: probe score)
 
 > 코드·설정 예시는 의도를 보여 주는 스케치다. 실제 구현은 SDK 헤더, IOGraphics 동작, 실측이 우선한다.

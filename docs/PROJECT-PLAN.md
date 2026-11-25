@@ -213,7 +213,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-4.002  | 디스플레이 잠자기·깨우기와 잠금 화면                | 1.5     |
 | [X]    | WI-4.003  | 전원 상태 요청 최소 처리                            | 0.5     |
 | [X]    | WI-4.004  | 변경 감지 flush                                     | 2       |
-| [ ]    | WI-4.005  | virtqueue 선택 feature 측정                         | 1       |
+| [X]    | WI-4.005  | virtqueue 선택 feature 측정                         | 1       |
 
 - WI-4.001
   - [X] 커서 모양·위치가 cursorq로 갱신된다, 모양이 바뀌는 상황(텍스트 입력, 크기 조절)을 녹화로 확인했다 — 0.0.40: 화살표·I·창 가장자리·링크 손 모양, 크기(50%)·클릭 위치를 사용자가 확인. `VVCursor images=9 moves=330 drops=0`. 녹화는 없음(게스트 녹화 불가, WI-2.007과 같은 제약)
@@ -227,7 +227,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 화면이 멈춰 있을 때 전송량이 줄어든 것을 통계로 확인했다 — 0.0.41 정지 화면 30초: 25,188 MiB → 0 MiB (`VVDirtyStats`)
   - [X] 변경 감지를 켠 상태와 끈 상태의 CPU 사용률을 측정해 기록했다 — 게스트 `kernel_task` 6.1% → 24.9%, 호스트 QEMU 4.2~4.9% 차이 없음 → 기본값 꺼짐 (`docs/research/p4-performance.md`)
 - WI-4.005
-  - [ ] `INDIRECT_DESC`, `EVENT_IDX`를 켰을 때와 껐을 때를 측정하고 기본값을 정했다
+  - [X] `INDIRECT_DESC`, `EVENT_IDX`를 켰을 때와 껐을 때를 측정하고 기본값을 정했다 — **켬·끔 비교 측정 없이 분석으로 결정(사용자 승인 2026-11-25)**: 기본값 둘 다 끔. 근거: 명령을 한 번에 하나씩 보내고 완료를 기다리는 구조라 묶어 알릴 완료가 없고(EVENT_IDX), 64칸 큐에서 최대 2칸만 씀(INDIRECT_DESC). 실측 명령 101.5건/s, 인터럽트 102건/s, 시간 초과 0 (`docs/research/p4-performance.md`)
 
 ### P5. 안정화와 문서 — [PHASE-PLAN-05](phases/PHASE-PLAN-05.md)
 

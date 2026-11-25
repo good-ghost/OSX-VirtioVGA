@@ -52,6 +52,9 @@ public:
     // 디스플레이 파라미터를 바꾼다). setAttribute(kIOPowerAttribute)는 디스플레이 잠자기 때 오지 않았다
     // (0.0.31 실측, WI-4.002). 어떤 선택자가 오는지 VVFbPowerTrace에 남긴다(진단용).
     IOReturn setAttributeForConnection(IOIndex connectIndex, IOSelect attribute, uintptr_t value) override;
+    // 하드웨어 커서 (WI-4.001, REQ-033). boot-arg `-vvideoswcursor`면 소프트웨어 커서 (REQ-051).
+    IOReturn setCursorImage(void *cursorImage) override;
+    IOReturn setCursorState(SInt32 x, SInt32 y, bool visible) override;
     // EDID (WI-3.003, REQ-025). GPU 서비스가 검증한 EDID를 128바이트 블록으로 준다.
     bool hasDDCConnect(IOIndex connectIndex) override;
     IOReturn getDDCBlock(IOIndex connectIndex, UInt32 blockNumber, IOSelect blockType, IOOptionBits options,

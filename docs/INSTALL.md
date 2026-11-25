@@ -129,6 +129,8 @@ boot-args는 OpenCore가 **부팅할 때마다 config.plist 값으로 다시 쓴
 
 로그 수준을 바꿀 때도 같은 위치에 `vvideo_log=0|1|2`를 넣는다.
 
+하드웨어 커서를 끄려면 같은 위치에 `-vvideoswcursor`를 넣는다 (소프트웨어 커서, REQ-051). 커서 크기 비율은 kext `Info.plist`의 `VVCursorScale`(기본 50: 호스트 창이 HiDPI 게스트 화면을 절반으로 보여 줄 때)이고, boot-arg `vvideo_cursor_scale=100|50`이 있으면 그것을 쓴다.
+
 ### 4.2 `Enabled=false` (kext를 아예 로드하지 않는다)
 
 ```bash
@@ -214,6 +216,7 @@ sudo shutdown -r now
 | `config.plist.bak-20261124-wi2005-t04` | T-04 스텁(0.0.21) OC 주입 시험 전 | Enabled=true, boot-args `keepsyms=1` |
 | `config.plist.bak-20261124-auxkc-sip` | SIP 0x201·OC 주입 끄기 전 | Enabled=true, csr `00000000` |
 | `config.plist.bak-20261124-wi2004-redo` | 스냅샷 복구 후 WI-2.004 재설치 전 | VirtioVideo 항목이 없는 원래 설정 (복구로 위 백업들은 EFI에서 사라짐) |
+| `config.plist.bak-20261125-wi4001`    | WI-4.001 소프트웨어 커서 시험 전  | boot-args `keepsyms=1` |
 
 위 표에서 `wi2004-redo`를 뺀 백업은 2026-11-24 호스트 스냅샷 "WI-001" 복구로 EFI에서 사라졌다 ([WI-2.004.md](WI-2.004.md)).
 

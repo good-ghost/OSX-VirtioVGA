@@ -209,15 +209,15 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 
 | Status | ID        | Description                                         | Man-day |
 | ------ | --------- | --------------------------------------------------- | ------- |
-| [ ]    | WI-4.001  | 하드웨어 커서 (cursorq)                             | 2       |
+| [X]    | WI-4.001  | 하드웨어 커서 (cursorq)                             | 2       |
 | [X]    | WI-4.002  | 디스플레이 잠자기·깨우기와 잠금 화면                | 1.5     |
 | [X]    | WI-4.003  | 전원 상태 요청 최소 처리                            | 0.5     |
 | [ ]    | WI-4.004  | 변경 감지 flush                                     | 2       |
 | [ ]    | WI-4.005  | virtqueue 선택 feature 측정                         | 1       |
 
 - WI-4.001
-  - [ ] 커서 모양·위치가 cursorq로 갱신된다, 모양이 바뀌는 상황(텍스트 입력, 크기 조절)을 녹화로 확인했다
-  - [ ] 하드웨어 커서를 끄는 옵션에서 소프트웨어 커서로 동작한다
+  - [X] 커서 모양·위치가 cursorq로 갱신된다, 모양이 바뀌는 상황(텍스트 입력, 크기 조절)을 녹화로 확인했다 — 0.0.40: 화살표·I·창 가장자리·링크 손 모양, 크기(50%)·클릭 위치를 사용자가 확인. `VVCursor images=9 moves=330 drops=0`. 녹화는 없음(게스트 녹화 불가, WI-2.007과 같은 제약)
+  - [X] 하드웨어 커서를 끄는 옵션에서 소프트웨어 커서로 동작한다 — boot-args `keepsyms=1 -vvideoswcursor`: `get(crsr)=0`, `VVCursor images=0 moves=0`, cursorq 0건, 게스트 커서가 화면에 그려져 모양이 바뀜(사용자 확인), 패닉 없음
 - WI-4.002
   - [X] 디스플레이 잠자기 → 깨우기 → 잠금 화면 → 로그인 10회 반복에서 깨짐·검은 화면·패닉이 없다 (AC-09) — 0.0.36, `scripts/display-sleep-cycles.sh`: 10/10 ok, 패닉 없음, 로그인 뒤 스크린샷 2560×1600 (`docs/research/p4-display-sleep-ac09.log`, `docs/screenshots/p4/`). 녹화는 없음(게스트 `screencapture -V` 불가, WI-2.007과 같은 제약)
   - [X] 잠자기 동안 flush 타이머가 멈춘다 (로그·통계) — `VVDisplayPower sleeps=11 wakes=11`, `VVScanout blanks=11 flush-errors=0`, 잠자기 동안 호스트 창에 "Display output is not active." 

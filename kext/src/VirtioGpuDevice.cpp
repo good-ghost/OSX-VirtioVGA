@@ -735,6 +735,7 @@ void VirtioGpuDevice::releaseDevice()
         mCommandBuffer->release();
         mCommandBuffer = nullptr;
     }
+    releaseCursor();
 }
 
 void VirtioGpuDevice::publishPciDiagnostics(IOPCIDevice *pci)
@@ -873,6 +874,7 @@ void VirtioGpuDevice::publishCounters()
              mInterrupts, mConfigEvents, mQueueEvents[0], mQueueEvents[1], mCompletions[0], mCompletions[1],
              mDeviceErrors, mCommandsSent, mCommandTimeouts, mCommandErrors, mRecoveries);
     setProperty("VVEventCounters", summary);
+    publishCursor();
 }
 
 void VirtioGpuDevice::stop(IOService *provider)

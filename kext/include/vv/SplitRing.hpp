@@ -83,6 +83,9 @@ public:
 
     uint16_t size() const { return mSize; }
     uint16_t freeCount() const { return mFreeCount; }
+    // 다음 add()가 체인 머리로 쓸 디스크립터 번호. 디스크립터 하나짜리 요청의 버퍼 칸을 미리 정할 때 쓴다
+    // (cursorq: 링에 올리기 전에 요청을 칸에 써 두어 장치가 쓰다 만 요청을 읽지 않게 한다, WI-4.001).
+    uint16_t nextFreeHead() const { return mFreeHead; }
 
     // 조각들을 한 체인으로 묶어 avail 링에 올린다. 장치에 알리는 것(notify)은 호출자가 한다.
     // 반환: 성공 여부. 성공하면 headOut에 체인 머리를 남긴다 (완료 때 되돌려 받는다).

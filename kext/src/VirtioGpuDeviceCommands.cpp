@@ -245,7 +245,8 @@ void VirtioGpuDevice::runSelfTest()
 
 uint32_t VirtioGpuDevice::allocateResourceId()
 {
-    return mNextResourceId++;
+    // 주기 전송 스레드와 커서(프레임버퍼 스레드)가 함께 부른다. 이전 값을 돌려준다.
+    return static_cast<uint32_t>(OSIncrementAtomic(&mNextResourceId));
 }
 
 namespace {

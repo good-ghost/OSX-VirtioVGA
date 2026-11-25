@@ -99,3 +99,14 @@ WI-4.002를 먼저 한다. 사용자가 매일 겪는 동작이기 때문이다.
 - 깨어나기는 이 환경에서 시험할 수단이 없다. 키 입력은 S3의 QEMU VM을 깨우지 못하고(2회 중 1회는 23:17:32에 스스로 깨어났으나 원인 불명), GTK 메뉴에 QEMU 모니터가 없어 `system_wakeup`을 보낼 수 없다. 사용자는 시스템 잠자기를 쓰지 않는다(`sleep 0`, Q-04).
 
 결정(2026-11-24, 사용자): 잠들기 패닉 없음으로 WI-4.003을 닫고 깨어나기는 미시험으로 남긴다. 깨어나기를 시험하려면 호스트 QEMU 실행 옵션에 모니터(`-monitor stdio` 등)를 추가해 `system_wakeup`을 보낸다. 0.0.37의 전원 단계 진단 로그는 그대로 둔다.
+
+### WI-4.001 하드웨어 커서 (2026-11-24)
+
+| 버전 | 내용 | 결과 |
+| ---- | ---- | ---- |
+| 0.0.38 | `getAttribute(crsr)=1`. `setCursorImage`: 64×64 `kIO32ARGBPixelFormat`(메모리 B,G,R,A → `B8G8R8A8_UNORM`)으로 `convertCursorImage` → 커서 resource에 TRANSFER → 보이는 중이면 cursorq `UPDATE_CURSOR`. `setCursorState`: 왼쪽 위+핫스팟 = 포인터 위치로 `MOVE_CURSOR`, 숨기면 resource 0 `UPDATE_CURSOR`. cursorq는 응답을 기다리지 않고 게이트 안에서 링에 올린 뒤 다음 제출·인터럽트 때 회수한다. 요청 칸은 디스크립터 번호(`SplitRing::nextFreeHead`)로 정해 링에 올리기 전에 채운다. boot-arg `-vvideoswcursor`면 미지원 보고(소프트웨어 커서, REQ-051). 단위 테스트 72개(커서 3, 링 1 추가) | 사용자 시험: 화살표 정상·부드럽게 움직임, 창 가장자리·링크 손 모양 정상, 클릭 위치 정상. **I 커서가 두 개로 보임**, **커서가 소프트웨어 커서보다 큼** |
+| 0.0.39 | I 커서: `convertCursorImage`는 행을 커서 폭으로 붙여 쓴다(폭 64인 화살표만 정상이었던 이유). 변환 뒤 행을 64픽셀 간격으로 다시 놓는다(`vv::cursor::repackRows`, 단위 테스트 2개) | 사용자 시험: I 커서 정상. 커서는 50% 정도가 맞다. 게스트 2560×1600(HiDPI, UI 1280×800), 호스트 1920×1200에서 QEMU 창 1280×800 |
+| 0.0.40 | 커서 크기 비율: 50이면 2×2 평균으로 절반으로 줄이고 장치 핫스팟도 절반. 포인터 위치는 원래 핫스팟으로 구한다. 설정 순서: boot-arg `vvideo_cursor_scale` > Info.plist personality `VVCursorScale`(기본 50, EFI 수정 없이 kext 설치로 정함) > 100. 단위 테스트 2개 | 사용자 시험: 크기·클릭 위치 정상. `VVCursor resource=2 images=9 moves=330 hides=10 drops=0 rejects=0 scale=50`, cursorq 완료 346, 장치 오류 0, 패닉 없음 |
+
+커서 크기: QEMU 10.0 `ui/gtk.c gd_cursor_define`은 커서 이미지를 픽셀 크기 그대로 호스트 GDK 커서로 만든다(창 배율을 적용하지 않음). 게스트는 HiDPI 2560×1600이라 WindowServer가 2배 커서를 준다. 호스트 창이 게스트 화면을 축소해 보여 주면 화면만 줄고 커서는 그대로여서 커 보인다. 드라이버는 호스트 배율을 알 수 없다.
+| 0.0.40 | 대체 경로: boot-args `keepsyms=1 -vvideoswcursor` (config.plist 백업 `config.plist.bak-20261125-wi4001`) | `get(crsr)=0`, `VVCursor resource=0 images=0 moves=0`, `cursorq=0`. 게스트 커서가 프레임버퍼에 그려져 화면과 함께 줄고 모양이 바뀜, 호스트 포인터도 보임(0.0.38 이전과 같은 동작). 패닉 없음. 시험 뒤 boot-args를 `keepsyms=1`로 되돌림 |

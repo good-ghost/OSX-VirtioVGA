@@ -30,6 +30,7 @@
 
 #include <kern/thread_call.h>
 
+#include "vv/Cursor.hpp"
 #include "vv/DeviceHealth.hpp"
 #include "vv/DisplayMode.hpp"
 #include "vv/GpuCommand.hpp"
@@ -72,6 +73,16 @@ public:
     // 프레임버퍼 전원 단계가 바뀔 때 장치 상태를 로그로 남긴다 (WI-4.003 진단). 시스템 잠자기(0)에서 깨어난 뒤
     // QEMU가 virtio 장치를 reset했는지(device_status·queue_enable) PCI 명령 레지스터가 복원됐는지 본다.
     void noteFramebufferPowerState(unsigned long state);
+    // 하드웨어 커서 (WI-4.001, REQ-033, VirtioGpuDeviceCursor.cpp). 프레임버퍼의 setCursorImage·setCursorState가 부른다.
+    // 커서 backing(64×64 BGRA)을 비우고 CPU 주소를 돌려준다. 커서 resource가 없으면 만든다(controlq, 기다림).
+    // 실패하면 nullptr. 워크루프 밖에서 부른다.
+    uint8_t *prepareCursorImage();
+    // prepareCursorImage로 받은 버퍼에 이미지를 채운 뒤 부른다. 장치로 보내고(TRANSFER) 보이는 중이면 UPDATE_CURSOR.
+    IOReturn commitCursorImage(uint32_t width, uint32_t height, uint32_t hotX, uint32_t hotY);
+    // 커서 왼쪽 위 좌표와 표시 여부. 응답을 기다리지 않는다(cursorq에 올리고 회수는 나중에).
+    void setCursorState(int32_t left, int32_t top, bool visible);
+    // 변환 실패 등으로 하드웨어 커서를 숨긴다.
+    void hideCursor();
     // 장치가 알려 준 선호 해상도 (WI-3.004).
     vv::display::Mode preferredMode() const { return mPreferredMode; }
     // 검증을 통과한 EDID를 out에 복사하고 길이를 돌려준다. 없으면 0 (WI-3.003).
@@ -103,6 +114,13 @@ private:
     void stopTimers();
     void checkStatus();
     void publishCounters();
+    // 커서 (VirtioGpuDeviceCursor.cpp)
+    bool ensureCursorResource();
+    uint32_t cursorScaleSetting();
+    void queueCursorCommand(const vv::virtio::gpu::UpdateCursor &request);
+    static IOReturn gatedCursorSubmit(OSObject *owner, void *request, void *, void *, void *);
+    void publishCursor();
+    void releaseCursor();
 
     // 명령 하나를 보내고 완료를 기다린다. 응답을 response에 복사하고 장치가 쓴 길이를 written에 남긴다.
     IOReturn submitCommand(const void *request, uint32_t requestBytes, void *response, uint32_t responseBytes,
@@ -209,7 +227,25 @@ private:
     IOTimerEventSource *mPatternTimer = nullptr;
     // 실행 중인 thread_call(확인 명령·시험 패턴) 수. stop에서 0이 될 때까지 기다린다
     volatile SInt32 mDisplayQueryActive = 0;
-    uint32_t mNextResourceId = 1;  // 0은 "resource 없음"(scanout 끄기)이라 쓰지 않는다
+    // 커서 (WI-4.001). resource는 장치 복구(reset) 때 사라지므로 만든 때의 복구 횟수를 기억해 다시 만든다.
+    VVDmaBuffer *mCursorBacking = nullptr;   // 64×64 BGRA 이미지, 장치가 TRANSFER 때 읽는다
+    VVDmaBuffer *mCursorRequests = nullptr;  // cursorq 요청 칸. 칸 번호 = 디스크립터 번호
+    uint32_t mCursorResourceId = 0;
+    uint32_t mCursorRecoveryEpoch = 0;
+    uint32_t mCursorHotX = 0;
+    uint32_t mCursorHotY = 0;
+    uint32_t mCursorDeviceHotX = 0;  // 장치에 보낸(줄였을 수 있는) 이미지의 핫스팟
+    uint32_t mCursorDeviceHotY = 0;
+    uint32_t mCursorScale = 100;     // 50 또는 100. boot-arg vvideo_cursor_scale > Info.plist VVCursorScale
+    vv::cursor::Position mCursorPosition{};  // 장치에 마지막으로 보낸 포인터 위치
+    bool mCursorImageReady = false;
+    bool mCursorVisible = false;
+    uint32_t mCursorImages = 0;
+    uint32_t mCursorMoves = 0;
+    uint32_t mCursorHides = 0;
+    uint32_t mCursorDrops = 0;
+    uint32_t mCursorRejects = 0;
+    volatile SInt32 mNextResourceId = 1;  // 0은 "resource 없음"(scanout 끄기)이라 쓰지 않는다
 
     thread_call_t mFlushCall = nullptr;
     volatile bool mScanoutRequested = false;

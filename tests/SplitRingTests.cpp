@@ -167,3 +167,25 @@ VV_TEST(ring_outOfRangeUsedId_reportedAsDeviceError)
     v::RingCompletion done{};
     VV_EXPECT(f.ring.collect(done) == Result::DeviceError);
 }
+
+VV_TEST(ring_nextFreeHead_predictsSingleDescriptorHead)
+{
+    // cursorq는 add 전에 요청을 칸[nextFreeHead]에 쓴다. 완료 순서가 뒤바뀌어도 예측이 맞아야 한다.
+    RingFixture fixture(4);
+    FakeDevice device{fixture.ring};
+    const v::RingSegment segment{0x1000, 56, false};
+    for (int round = 0; round < 10; ++round) {
+        const uint16_t predicted = fixture.ring.nextFreeHead();
+        uint16_t head = 0xFFFF;
+        VV_EXPECT(fixture.ring.add(&segment, 1, head));
+        VV_EXPECT(head == predicted);
+        if (round % 3 == 2) {
+            // 몇 개를 쌓아 두었다가 한꺼번에 돌려받는다.
+            while (device.completeOne(0) != 0) {
+            }
+            v::RingCompletion completion{};
+            while (fixture.ring.collect(completion) == Result::Completed) {
+            }
+        }
+    }
+}

@@ -1,6 +1,7 @@
 #include "VirtioVideoFramebuffer.hpp"
 
 #include <IOKit/IODeviceMemory.h>
+#include <IOKit/graphics/IOGraphicsInterfaceTypes.h>
 #include <pexpert/pexpert.h>
 
 #include "VVBootArgs.hpp"
@@ -15,6 +16,8 @@ OSDefineMetaClassAndStructors(VirtioVideoFramebuffer, IOFramebuffer)
 namespace {
 // 이 boot-arg가 있어야 매칭한다 (VirtioGpuDeviceTakeover.cpp와 같은 값).
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
+// 하드웨어 커서를 끄고 소프트웨어 커서를 쓴다 (REQ-051, WI-4.001).
+constexpr const char *kSoftwareCursorBootArg = "-vvideoswcursor";
 // 전원 상태 (IONDRVFramebuffer와 같은 3단계).
 constexpr unsigned long kPowerStateCount = 3;
 constexpr unsigned long kPowerStateIdle = 1;
@@ -43,6 +46,12 @@ void selectorName(uint32_t selector, char out[5])
         out[i] = (c >= 0x20 && c < 0x7F) ? c : '.';
     }
     out[4] = '\0';
+}
+
+bool softwareCursorForced()
+{
+    int unused = 0;
+    return PE_parse_boot_argn(kSoftwareCursorBootArg, &unused, sizeof(unused));
 }
 
 bool takeoverEnabled()
@@ -386,9 +395,10 @@ IOReturn VirtioVideoFramebuffer::getAttribute(IOSelect attribute, uintptr_t *val
         return kIOReturnSuccess;
     }
     if (attribute == kIOHardwareCursorAttribute) {
-        // 하드웨어 커서는 WI-4.001. 지금은 미지원을 보고해 소프트웨어 커서를 쓰게 한다 (REQ-051).
+        // 하드웨어 커서 (WI-4.001, REQ-033). boot-arg로 끄면 미지원을 보고해 IOGraphics가 소프트웨어 커서를
+        // 프레임버퍼에 그리게 한다 (REQ-051).
         if (value != nullptr) {
-            *value = 0;
+            *value = (mGpu != nullptr && !softwareCursorForced()) ? 1 : 0;
         }
         return kIOReturnSuccess;
     }
@@ -464,6 +474,44 @@ void VirtioVideoFramebuffer::displayConfigChanged()
     VV_LOG_INFO("fb: display changed, mode list rebuilt (%u modes, preferred %ux%u)", static_cast<unsigned>(mModes.count),
                 preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0);
     trace("displayChanged-rebuilt");
+}
+
+IOReturn VirtioVideoFramebuffer::setCursorImage(void *cursorImage)
+{
+    if (mGpu == nullptr || softwareCursorForced()) {
+        return kIOReturnUnsupported;
+    }
+    uint8_t *pixels = mGpu->prepareCursorImage();
+    if (pixels == nullptr) {
+        mGpu->hideCursor();
+        return kIOReturnUnsupported;
+    }
+    // 장치 커서 형식(64×64, 32비트 ARGB)을 알려 주고 IOGraphics가 변환하게 한다 (헤더 규약: 실패하면 숨기고
+    // kIOReturnUnsupported).
+    IOHardwareCursorDescriptor description{};
+    description.majorVersion = kHardwareCursorDescriptorMajorVersion;
+    description.minorVersion = kHardwareCursorDescriptorMinorVersion;
+    description.width = vv::cursor::kSize;
+    description.height = vv::cursor::kSize;
+    description.bitDepth = kIO32ARGBPixelFormat;
+    IOHardwareCursorInfo info{};
+    info.majorVersion = kHardwareCursorInfoMajorVersion;
+    info.minorVersion = kHardwareCursorInfoMinorVersion;
+    info.hardwareCursorData = pixels;
+    if (!convertCursorImage(cursorImage, &description, &info)) {
+        mGpu->hideCursor();
+        return kIOReturnUnsupported;
+    }
+    return mGpu->commitCursorImage(info.cursorWidth, info.cursorHeight, info.cursorHotSpotX, info.cursorHotSpotY);
+}
+
+IOReturn VirtioVideoFramebuffer::setCursorState(SInt32 x, SInt32 y, bool visible)
+{
+    if (mGpu == nullptr) {
+        return kIOReturnNotReady;
+    }
+    mGpu->setCursorState(x, y, visible);
+    return kIOReturnSuccess;
 }
 
 IOReturn VirtioVideoFramebuffer::setAttributeForConnection(IOIndex connectIndex, IOSelect attribute,

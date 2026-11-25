@@ -1,0 +1,118 @@
+# 2026-11-25 00:29:30 mode switch test count=100 interval=1500ms kext=(0.0.41)
+## before 00:29:30
+classes: VirtioGpuDevice = 1, VirtioVideoFramebuffer = 1, VirtioQueue = 2, VVDmaBuffer = 6, VirtioPciTransport = 1, IOBufferMemoryDescriptor = 446
+wired-pages: 487130
+  "VVEventCounters" = "interrupts=96097 config=0 controlq=92706 cursorq=3439 completions=92706/3601 device-errors=0 commands=92706 timeouts=0 errors=1"
+  "VVScanout" = "running resource=1 setups=1 flushes=49476 flush-errors=0 blanks=0"
+panics: 5
+start 1280x800 (pixels 2560x1600), 17 modes, 100 switches, interval 1500 ms
+1/100 1024x768 (pixels 1024x768) -> ok
+2/100 1280x800 (pixels 1280x800) -> ok
+3/100 1440x900 (pixels 1440x900) -> ok
+4/100 1280x1024 (pixels 1280x1024) -> ok
+5/100 1600x900 (pixels 1600x900) -> ok
+6/100 1680x1050 (pixels 1680x1050) -> ok
+7/100 1920x1080 (pixels 1920x1080) -> ok
+8/100 1920x1200 (pixels 1920x1200) -> ok
+9/100 2560x1440 (pixels 2560x1440) -> ok
+10/100 2560x1600 (pixels 2560x1600) -> ok
+11/100 720x450 (pixels 1440x900) -> ok
+12/100 800x450 (pixels 1600x900) -> ok
+13/100 840x525 (pixels 1680x1050) -> ok
+14/100 960x540 (pixels 1920x1080) -> ok
+15/100 960x600 (pixels 1920x1200) -> ok
+16/100 1280x720 (pixels 2560x1440) -> ok
+17/100 1280x800 (pixels 2560x1600) -> ok
+18/100 1024x768 (pixels 1024x768) -> ok
+19/100 1280x800 (pixels 1280x800) -> ok
+20/100 1440x900 (pixels 1440x900) -> ok
+21/100 1280x1024 (pixels 1280x1024) -> ok
+22/100 1600x900 (pixels 1600x900) -> ok
+23/100 1680x1050 (pixels 1680x1050) -> ok
+24/100 1920x1080 (pixels 1920x1080) -> ok
+25/100 1920x1200 (pixels 1920x1200) -> ok
+26/100 2560x1440 (pixels 2560x1440) -> ok
+27/100 2560x1600 (pixels 2560x1600) -> ok
+28/100 720x450 (pixels 1440x900) -> ok
+29/100 800x450 (pixels 1600x900) -> ok
+30/100 840x525 (pixels 1680x1050) -> ok
+31/100 960x540 (pixels 1920x1080) -> ok
+32/100 960x600 (pixels 1920x1200) -> ok
+33/100 1280x720 (pixels 2560x1440) -> ok
+34/100 1280x800 (pixels 2560x1600) -> ok
+35/100 1024x768 (pixels 1024x768) -> ok
+36/100 1280x800 (pixels 1280x800) -> ok
+37/100 1440x900 (pixels 1440x900) -> ok
+38/100 1280x1024 (pixels 1280x1024) -> ok
+39/100 1600x900 (pixels 1600x900) -> ok
+40/100 1680x1050 (pixels 1680x1050) -> ok
+41/100 1920x1080 (pixels 1920x1080) -> ok
+42/100 1920x1200 (pixels 1920x1200) -> ok
+43/100 2560x1440 (pixels 2560x1440) -> ok
+44/100 2560x1600 (pixels 2560x1600) -> ok
+45/100 720x450 (pixels 1440x900) -> ok
+46/100 800x450 (pixels 1600x900) -> ok
+47/100 840x525 (pixels 1680x1050) -> ok
+48/100 960x540 (pixels 1920x1080) -> ok
+49/100 960x600 (pixels 1920x1200) -> ok
+50/100 1280x720 (pixels 2560x1440) -> ok
+51/100 1280x800 (pixels 2560x1600) -> ok
+52/100 1024x768 (pixels 1024x768) -> ok
+53/100 1280x800 (pixels 1280x800) -> ok
+54/100 1440x900 (pixels 1440x900) -> ok
+55/100 1280x1024 (pixels 1280x1024) -> ok
+56/100 1600x900 (pixels 1600x900) -> ok
+57/100 1680x1050 (pixels 1680x1050) -> ok
+58/100 1920x1080 (pixels 1920x1080) -> ok
+59/100 1920x1200 (pixels 1920x1200) -> ok
+60/100 2560x1440 (pixels 2560x1440) -> ok
+61/100 2560x1600 (pixels 2560x1600) -> ok
+62/100 720x450 (pixels 1440x900) -> ok
+63/100 800x450 (pixels 1600x900) -> ok
+64/100 840x525 (pixels 1680x1050) -> ok
+65/100 960x540 (pixels 1920x1080) -> ok
+66/100 960x600 (pixels 1920x1200) -> ok
+67/100 1280x720 (pixels 2560x1440) -> ok
+68/100 1280x800 (pixels 2560x1600) -> ok
+69/100 1024x768 (pixels 1024x768) -> ok
+70/100 1280x800 (pixels 1280x800) -> ok
+71/100 1440x900 (pixels 1440x900) -> ok
+72/100 1280x1024 (pixels 1280x1024) -> ok
+73/100 1600x900 (pixels 1600x900) -> ok
+74/100 1680x1050 (pixels 1680x1050) -> ok
+75/100 1920x1080 (pixels 1920x1080) -> ok
+76/100 1920x1200 (pixels 1920x1200) -> ok
+77/100 2560x1440 (pixels 2560x1440) -> ok
+78/100 2560x1600 (pixels 2560x1600) -> ok
+79/100 720x450 (pixels 1440x900) -> ok
+80/100 800x450 (pixels 1600x900) -> ok
+81/100 840x525 (pixels 1680x1050) -> ok
+82/100 960x540 (pixels 1920x1080) -> ok
+83/100 960x600 (pixels 1920x1200) -> ok
+84/100 1280x720 (pixels 2560x1440) -> ok
+85/100 1280x800 (pixels 2560x1600) -> ok
+86/100 1024x768 (pixels 1024x768) -> ok
+87/100 1280x800 (pixels 1280x800) -> ok
+88/100 1440x900 (pixels 1440x900) -> ok
+89/100 1280x1024 (pixels 1280x1024) -> ok
+90/100 1600x900 (pixels 1600x900) -> ok
+91/100 1680x1050 (pixels 1680x1050) -> ok
+92/100 1920x1080 (pixels 1920x1080) -> ok
+93/100 1920x1200 (pixels 1920x1200) -> ok
+94/100 2560x1440 (pixels 2560x1440) -> ok
+95/100 2560x1600 (pixels 2560x1600) -> ok
+96/100 720x450 (pixels 1440x900) -> ok
+97/100 800x450 (pixels 1600x900) -> ok
+98/100 840x525 (pixels 1680x1050) -> ok
+99/100 960x540 (pixels 1920x1080) -> ok
+100/100 960x600 (pixels 1920x1200) -> ok
+restore 1280x800 (pixels 2560x1600) -> ok
+failures=0
+mode-cycle exit=0
+## after 00:32:50
+classes: VirtioGpuDevice = 1, VirtioVideoFramebuffer = 1, VirtioQueue = 2, VVDmaBuffer = 6, VirtioPciTransport = 1, IOBufferMemoryDescriptor = 449
+wired-pages: 486970
+  "VVCurrentMode" = "2560x1600 changes=101"
+  "VVEventCounters" = "interrupts=119979 config=101 controlq=115259 cursorq=4584 completions=115259/5603 device-errors=0 commands=115260 timeouts=0 er"
+  "VVScanout" = "running resource=103 setups=102 flushes=60202 flush-errors=0 blanks=0"
+panics: 5

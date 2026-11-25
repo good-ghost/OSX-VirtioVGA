@@ -103,3 +103,12 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
   - WEG가 외부 GPU에 하는 일(이름 `GFX0`으로 변경, `AAPL,slot-name`, `model`, configRead 후킹)의 흔적이 없다. 장치 이름은 `S30@6`/`display` 그대로다.
   - `"built-in" = <00>` 속성의 출처는 확인하지 못했다. 위 근거로 WEG 경로는 아니다.
 - macOS 업데이트: 15.8.3(24H241) 최신. `softwareupdate -l`이 주는 것은 macOS Tahoe 26.7.3뿐이라 범위 밖(Q-05)이므로 시험하지 않는다.
+
+### WI-5.002 모드 전환 100회·누수 시험 (2026-11-25)
+
+- 도구: 새 의존성 없이 `scripts/mode-cycle.swift`(CoreGraphics `CGConfigureDisplayWithDisplayMode`, HiDPI 포함 모드 목록)와 전후 기록용 `scripts/mode-switch-test.sh`.
+- 조건: kext 0.0.41, 시작 모드 1280×800 HiDPI(픽셀 2560×1600), 모드 17개를 차례로 100회, 간격 1.5초.
+- 결과: 100회 모두 요청한 모드로 바뀜(failures=0), 원래 모드 복원 ok. 패닉 보고서 수 그대로(5, 모두 이전 것). `flush-errors=0`, `timeouts=0`, `device-errors=0`. `VVCurrentMode changes=101`, scanout resource 1 → 103(전환마다 새로 만들고 이전 것은 해제).
+- 누수: 드라이버 객체 수 전후 같음(`VirtioGpuDevice 1, VirtioVideoFramebuffer 1, VirtioQueue 2, VVDmaBuffer 6, VirtioPciTransport 1`). 고정 메모리 487,130 → 486,970 페이지(감소). 시스템 전체 `IOBufferMemoryDescriptor`는 446 → 449였지만 모드 전환 없이도 20초 사이 448 → 452로 변하므로 드라이버와 무관하다.
+- 관찰: 전환마다 QEMU가 config 변경 이벤트를 하나씩 보낸다(`config=101`). 드라이버는 display info·EDID를 다시 읽고 모드 목록을 맞춘다(WI-3.005 경로).
+- `zprint`(root 필요)는 쓰지 않았다. 객체 수와 고정 메모리로 판정했다.

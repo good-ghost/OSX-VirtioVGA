@@ -69,9 +69,24 @@ bool VVDmaBuffer::initWithLength(size_t bytes)
     }
     mDeviceAddress = segment.fIOVMAddr;
 
+    // getPhysicalSegment는 큰 버퍼(128 MiB)에서 첫 조각만 돌려줄 수 있다 (0.0.27 실측: 연속 할당인데 길이가 짧게 나와
+    // 비연속으로 오판). 조각을 끝까지 따라가며 서로 이어지는지 확인한다.
     IOByteCount physicalLength = 0;
     const addr64_t physical = mMemory->getPhysicalSegment(0, &physicalLength, kIOMemoryMapperNone);
-    mPhysicalAddress = physicalLength >= mLength ? physical : 0;
+    addr64_t expected = physical;
+    IOByteCount offset2 = 0;
+    bool contiguous = physical != 0;
+    while (contiguous && offset2 < mLength) {
+        IOByteCount length = 0;
+        const addr64_t segmentStart = mMemory->getPhysicalSegment(offset2, &length, kIOMemoryMapperNone);
+        if (segmentStart != expected || length == 0) {
+            contiguous = false;
+            break;
+        }
+        offset2 += length;
+        expected += length;
+    }
+    mPhysicalAddress = contiguous ? physical : 0;
     return true;
 }
 

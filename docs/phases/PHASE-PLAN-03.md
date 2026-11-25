@@ -112,3 +112,9 @@ WI-3.005 (WI-3.004 이후)
 
 - `IOFramebuffer::start` 뒤 `IOFBMemorySize`를 128 MiB로 덮어썼지만 IOGraphics가 VRAM 범위 길이(16,384,000)로 다시 썼다. `system_profiler` VRAM = 15 MB.
 - 0.0.27: 풀 상한 128 MiB를 실제 물리 연속으로 할당하고 그 범위를 VRAM으로 보고한다. 실패하면 최대 모드 크기(16 MB)로 물러선다.
+
+### WI-3.007·3.008 실기 (2026-11-24, kext 0.0.27)
+
+- **모드 복원**: 재부팅 전 2560×1600(HiDPI, UI 1280×800)을 고른 상태로 재부팅 → 같은 모드로 시작(`VVCurrentMode = 2560x1600 changes=1`, system_profiler 일치). macOS가 모드 ID로 저장·복원한다 (WI-3.007 확인).
+- **VRAM**: 여전히 15 MB. 로그 `134217728-byte contiguous pool unavailable` → 16 MB로 후퇴. `dma:` 오류 로그는 없어 할당·DMA 세그먼트 검사는 통과했고, `getPhysicalSegment(0)`가 첫 조각 길이만 돌려줘 비연속으로 오판한 것으로 본다(확인은 0.0.28에서).
+- 0.0.28: 물리 조각을 끝까지 따라가며 연속인지 확인하도록 `VVDmaBuffer`를 고침.

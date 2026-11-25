@@ -78,4 +78,10 @@ WI-4.002를 먼저 한다. 사용자가 매일 겪는 동작이기 때문이다.
 | 0.0.35 | 끊기·다시 연결 결과를 로그로 남기고 `VVScanout`에 `blanks=` 횟수를 넣는다 | 사용자 시험: 변화 없음. `VVScanout … blanks=0`, 로그에 끊기 기록 없음, `VVDisplayPower on sleeps=1 wakes=1`. 원인: 잠자기 때 `set(pwrs)=1` 직후 `set(powr)=1`이 오고, `powr≠0`을 켜짐으로 처리해 바로 다시 켰다. 로그의 off→on 한 쌍은 잠자기 순간에 함께 찍힌 것이고 깨울 때가 아니었다. 0.0.33의 "화면 멈춤"도 전송 중지가 아니라 WindowServer가 그리기를 멈춘 것이다 |
 | 0.0.36 | 켜기·끄기 판단을 `pwrs`(전원 단계)로만 한다. `powr` 값은 기억만 하고, `kConnectionPower` 처리는 뺀다(오지 않음) | 사용자 시험 1회: 잠자기 동안 호스트 창에 "Display output is not active." 표시, 키 입력으로 깨우면 잠금 화면, 패닉 없음. 로그 `scanout 0 disabled for display sleep -> 0x0` → `scanout 0 -> resource 2 after display wake -> 0x0`, `blanks=1`, `flush-errors=0`. **동작 확인.** AC-09 10회 반복은 남음 |
 
-조치: 시스템 잠자기는 사용자가 껐다 (`sleep 0`, Q-04). 0.0.36에서 잠자기·깨우기가 동작한다. 남은 것: AC-09 10회 반복과 녹화(`docs/movie/p4-display-sleep.mov`).
+조치: 시스템 잠자기는 사용자가 껐다 (`sleep 0`, Q-04). 0.0.36에서 잠자기·깨우기가 동작한다.
+
+**AC-09 결과 (2026-11-24 22:58–23:08, 0.0.36)**: `scripts/display-sleep-cycles.sh 10` — 10회 모두 ok (매회 `sleeps`·`wakes`·`blanks`가 1씩 늘고 `flush-errors=0`), 패닉 없음. 로그는 `docs/research/p4-display-sleep-ac09.log`, 로그인 뒤 스크린샷은 `docs/screenshots/p4/display-sleep-01..10.png`(모두 2560×1600).
+
+제약:
+- 스크린샷에는 바탕화면과 메뉴 막대만 있고 창은 없다. 터미널에 화면 기록 권한이 없을 때 `screencapture`가 창을 빼고 찍는 동작이다. 해상도·렌더링 확인 근거로만 쓴다.
+- 녹화(`docs/movie/p4-display-sleep.mov`)는 만들지 못했다. 게스트 `screencapture -V`가 실패한다(WI-2.007과 같은 제약). 호스트 녹화가 필요하다.

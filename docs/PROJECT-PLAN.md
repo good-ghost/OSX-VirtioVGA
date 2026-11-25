@@ -210,7 +210,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | Status | ID        | Description                                         | Man-day |
 | ------ | --------- | --------------------------------------------------- | ------- |
 | [ ]    | WI-4.001  | 하드웨어 커서 (cursorq)                             | 2       |
-| [ ]    | WI-4.002  | 디스플레이 잠자기·깨우기와 잠금 화면                | 1.5     |
+| [X]    | WI-4.002  | 디스플레이 잠자기·깨우기와 잠금 화면                | 1.5     |
 | [ ]    | WI-4.003  | 전원 상태 요청 최소 처리                            | 0.5     |
 | [ ]    | WI-4.004  | 변경 감지 flush                                     | 2       |
 | [ ]    | WI-4.005  | virtqueue 선택 feature 측정                         | 1       |
@@ -219,8 +219,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [ ] 커서 모양·위치가 cursorq로 갱신된다, 모양이 바뀌는 상황(텍스트 입력, 크기 조절)을 녹화로 확인했다
   - [ ] 하드웨어 커서를 끄는 옵션에서 소프트웨어 커서로 동작한다
 - WI-4.002
-  - [ ] 디스플레이 잠자기 → 깨우기 → 잠금 화면 → 로그인 10회 반복에서 깨짐·검은 화면·패닉이 없다 (AC-09)
-  - [ ] 잠자기 동안 flush 타이머가 멈춘다 (로그·통계)
+  - [X] 디스플레이 잠자기 → 깨우기 → 잠금 화면 → 로그인 10회 반복에서 깨짐·검은 화면·패닉이 없다 (AC-09) — 0.0.36, `scripts/display-sleep-cycles.sh`: 10/10 ok, 패닉 없음, 로그인 뒤 스크린샷 2560×1600 (`docs/research/p4-display-sleep-ac09.log`, `docs/screenshots/p4/`). 녹화는 없음(게스트 `screencapture -V` 불가, WI-2.007과 같은 제약)
+  - [X] 잠자기 동안 flush 타이머가 멈춘다 (로그·통계) — `VVDisplayPower sleeps=11 wakes=11`, `VVScanout blanks=11 flush-errors=0`, 잠자기 동안 호스트 창에 "Display output is not active." 
 - WI-4.003
   - [ ] 시스템 잠자기 요청에 패닉 없이 응답한다 (복원 기능은 범위 밖, REQ-054 W)
 - WI-4.004

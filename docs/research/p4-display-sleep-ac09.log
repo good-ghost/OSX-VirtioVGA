@@ -1,0 +1,12 @@
+# AC-09 시작 2026-11-24 22:58:31 kext=(0.0.36)
+cycle=1 result=ok woke=22:59:55 sleeps=2 wakes=2 blanks=2 flush-errors=0 shot=display-sleep-01.png size=2560 1600
+cycle=2 result=ok woke=23:00:07 sleeps=3 wakes=3 blanks=3 flush-errors=0 shot=display-sleep-02.png size=2560 1600
+cycle=3 result=ok woke=23:01:03 sleeps=4 wakes=4 blanks=4 flush-errors=0 shot=display-sleep-03.png size=2560 1600
+cycle=4 result=ok woke=23:01:44 sleeps=5 wakes=5 blanks=5 flush-errors=0 shot=display-sleep-04.png size=2560 1600
+cycle=5 result=ok woke=23:03:02 sleeps=6 wakes=6 blanks=6 flush-errors=0 shot=display-sleep-05.png size=2560 1600
+cycle=6 result=ok woke=23:04:17 sleeps=7 wakes=7 blanks=7 flush-errors=0 shot=display-sleep-06.png size=2560 1600
+cycle=7 result=ok woke=23:05:25 sleeps=8 wakes=8 blanks=8 flush-errors=0 shot=display-sleep-07.png size=2560 1600
+cycle=8 result=ok woke=23:07:00 sleeps=9 wakes=9 blanks=9 flush-errors=0 shot=display-sleep-08.png size=2560 1600
+cycle=9 result=ok woke=23:07:50 sleeps=10 wakes=10 blanks=10 flush-errors=0 shot=display-sleep-09.png size=2560 1600
+cycle=10 result=ok woke=23:08:34 sleeps=11 wakes=11 blanks=11 flush-errors=0 shot=display-sleep-10.png size=2560 1600
+# AC-09 끝 23:08:45 failures=0

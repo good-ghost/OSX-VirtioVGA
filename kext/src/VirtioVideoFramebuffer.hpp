@@ -64,6 +64,11 @@ private:
     // 않은 원인 확인용, PHASE-PLAN-02). 처음 kMaxTraceEntries개만 남긴다.
     void trace(const char *what, uint32_t selector = 0, uint64_t value = 0);
 
+    // 전원 관리 트리에 들어간다 (WI-4.002). IOFramebuffer 기본 클래스는 PMinit·registerPowerDriver를 하지 않으며,
+    // IONDRVFramebuffer도 자기 initForPM()에서 직접 한다 (KDK 심볼 확인). 하지 않으면 디스플레이 잠자기 때
+    // setAttribute(kIOPowerAttribute)가 오지 않는다 (0.0.30 실측).
+    void initForPM();
+    bool mPMInitialized = false;
     uintptr_t mPowerState = 0;  // IOGraphics가 setAttribute(kIOPowerAttribute)로 준 마지막 값
     uint32_t mTraceEntries = 0;
 

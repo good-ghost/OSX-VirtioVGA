@@ -15,6 +15,9 @@ OSDefineMetaClassAndStructors(VirtioVideoFramebuffer, IOFramebuffer)
 namespace {
 // 이 boot-arg가 있어야 매칭한다 (VirtioGpuDeviceTakeover.cpp와 같은 값).
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
+// 전원 상태 (IONDRVFramebuffer와 같은 3단계).
+constexpr unsigned long kPowerStateCount = 3;
+constexpr unsigned long kPowerStateOn = 2;
 // 깊이(색 형식)는 32bpp 하나뿐이다. 모드 ID는 vv/ModeTable.hpp가 정한다(1부터, 재부팅 간 고정).
 constexpr IOIndex kOnlyDepth = 0;
 // 60 Hz, 16.16 고정소수점.
@@ -139,8 +142,33 @@ bool VirtioVideoFramebuffer::start(IOService *provider)
     return true;
 }
 
+void VirtioVideoFramebuffer::initForPM()
+{
+    if (mPMInitialized || getProvider() == nullptr) {
+        return;
+    }
+    // IONDRVFramebuffer와 같은 3단계: 0 꺼짐, 1 대기(디스플레이 꺼짐·장치는 전원), 2 켜짐(사용 가능).
+    static IOPMPowerState powerStates[kPowerStateCount] = {
+        {kIOPMPowerStateVersion1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+        {kIOPMPowerStateVersion1, 0, 0, kIOPMPowerOn, 0, 0, 0, 0, 0, 0, 0, 0},
+        {kIOPMPowerStateVersion1, kIOPMDeviceUsable | kIOPMMaxPerformance, kIOPMPowerOn, kIOPMPowerOn, 0, 0, 0, 0, 0,
+         0, 0, 0},
+    };
+    PMinit();
+    getProvider()->joinPMtree(this);
+    const IOReturn registered = registerPowerDriver(this, powerStates, kPowerStateCount);
+    changePowerStateTo(kPowerStateOn);
+    mPMInitialized = true;
+    trace("initForPM", 0, static_cast<uint32_t>(registered));
+    VV_LOG_INFO("fb: power management registered -> 0x%x", registered);
+}
+
 void VirtioVideoFramebuffer::stop(IOService *provider)
 {
+    if (mPMInitialized) {
+        PMstop();
+        mPMInitialized = false;
+    }
     if (mGpu != nullptr) {
         if (mScanoutStarted) {
             mGpu->stopScanout();
@@ -171,6 +199,7 @@ IOReturn VirtioVideoFramebuffer::enableController()
     }
     const IOReturn result = mGpu->startScanout();
     mScanoutStarted = result == kIOReturnSuccess;
+    initForPM();
     trace("enableController", 0, static_cast<uint32_t>(result));
     VV_LOG_INFO("fb: enableController -> 0x%x", result);
     vv::publishLog(mGpu);

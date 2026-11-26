@@ -28,6 +28,7 @@ IORegistry 속성만 읽는다(root 불필요). 종료 코드 0이면 `driver-ok
 | `display power` | `VVDisplayPower` | `on sleeps=N wakes=N` | 잠자기·깨우기 횟수가 같아야 한다. 한 번도 안 잤으면 `-` |
 | `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=50` | `drops`(인터럽트 문맥 등으로 버린 이동), `rejects`(64×64 초과 이미지) |
 | `dirty flush` | `VVDirtyStats` | `on=0 …` | 변경 감지 전송 통계 (기본 꺼짐) |
+| `auto resize` | `VVAutoResizeState` | `on handler=enabled connect-changes=N last=WxH` | 창 크기 자동 전환 (INSTALL §5.4). `handler=none`이면 IOGraphics가 연결 변경 콜백을 등록하지 않은 것 |
 | `edid` | `VVEdid` | `ok size=1024` | `invalid:…`이면 장치가 준 EDID를 거절 |
 | `events` | `VVEventCounters` | `… device-errors=0 … timeouts=0 errors=1 recoveries=0` | `errors=1`은 부팅 때 자체 시험이 일부러 만든 오류다. `timeouts`·`device-errors`·`recoveries`가 늘면 장치 문제 |
 

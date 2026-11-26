@@ -11,6 +11,7 @@ kext는 커널에서 돈다. 설치·갱신할 때마다 §1의 준비를 먼저
 | --------- | ---- | --------- | ---- |
 | `VirtioVideo.kext` (본 드라이버) | `/Library/Extensions` | 보조 kernel collection (`kmutil load -z -p` 후 재부팅) | virtio-gpu 장치 초기화, `IOFramebuffer`, 화면 전송, 커서, EDID |
 | `VirtioVideoNdrvBlocker.kext` (보조) | `EFI/OC/Kexts` | OpenCore 주입 (Boot KC) | 부팅 초기에 GPU PCI 장치에 `AAPL,iokit-ignore-ndrv`를 붙여 IONDRV가 붙지 않게 한다 |
+| `vvresize` (선택) | `~/Library/Application Support/VirtioVideo`, LaunchAgent | 로그인 때 시작 (`scripts/vvresize-agent.sh install`) | 호스트 창 크기 자동 전환을 마무리한다 (§5.4) |
 
 - 본 드라이버를 OpenCore로 주입하지 않는 이유: IOGraphicsFamily 심볼을 쓰는 kext는 OpenCore 주입으로 로드되지 않는다(T-04).
 - SIP: `csr-active-config` = `01020000`(0x201, Kext Signing만 해제). 이보다 더 풀지 않는다.
@@ -116,6 +117,7 @@ sudo /usr/libexec/PlistBuddy -c "Set :NVRAM:Add:7C436110-AB2A-4BBB-A880-FE41995C
 | `vvideo_flush_ms` | 4~1000 | 16 | 화면 전송 주기(ms). 범위 밖이면 기본값 |
 | `vvideo_dirty` | 0 / 1 | Info.plist 값 | 바뀐 영역만 전송 (§5.2) |
 | `vvideo_dirty_tile` | 16~256의 2의 거듭제곱 | Info.plist 값 | 변경 감지 타일 크기 |
+| `vvideo_autoresize` | 0 / 1 | Info.plist 값 | 호스트 창 크기 자동 전환 (§5.4) |
 | `vvideo_log` | 0 / 1 / 2 | 1 | 로그 수준 (0 오류, 1 정보, 2 디버그) |
 | `vvideo_irq` | 0 / 1 / 2 | 0 | 인터럽트 방식 (MSI-X / INTx / Poll). 이 장치에서 1은 Poll로 내려간다 |
 | `vvideo_fail` | 1 / 2 / 3 | 없음 | 시험용: 전송 계층·장치 초기화·프레임버퍼 단계 실패 주입 (IONDRV로 돌아가는지 확인) |
@@ -132,6 +134,7 @@ EFI를 고치지 않고 kext 설치만으로 정하는 기본값이다. `kext/In
 | `VVCursorScale` | 50 | 하드웨어 커서 크기(%). QEMU GTK는 커서를 창 배율 없이 그린다. HiDPI 게스트(2560×1600)를 호스트 창 1280×800으로 볼 때 50이 맞다. 창을 1:1로 보면 100 (WI-4.001) |
 | `VVDirtyFlush` | 0 | 바뀐 영역만 전송. 측정 결과 호스트 이득이 없고 게스트 CPU만 늘어 꺼 둔다 (`docs/research/p4-performance.md`) |
 | `VVDirtyTile` | 64 | 변경 감지 타일 크기 |
+| `VVAutoResize` | 1 | 호스트 창 크기 자동 전환 (§5.4). 0이면 창 크기가 바뀌어도 모드 목록을 바꾸지 않는다 |
 
 ### 5.3 실행 중 바꾸기 (측정용)
 
@@ -140,6 +143,32 @@ EFI를 고치지 않고 kext 설치만으로 정하는 기본값이다. `kext/In
 ```bash
 scripts/vvctl.sh dirty 1
 ```
+
+### 5.4 호스트 창 크기 자동 전환 (WI-6.001)
+
+호스트에서 QEMU 창 크기를 바꾸면 게스트 해상도가 그 크기로 바뀐다. 드라이버와 에이전트 두 부분으로 된다.
+
+1. 드라이버: 창 크기 이벤트를 받으면 그 크기를 동적 모드(ID 100)로 넣고, 이벤트가 600 ms 멎으면 IOGraphics에 연결 변경을 알린다. WindowServer가 모드 목록을 다시 읽고 EDID 기본 해상도(= 창 크기)인 ID 100으로 바꾼다.
+2. 에이전트(`vvresize`): WindowServer는 그 뒤 디스플레이 설정에 저장된 모드로 돌아간다. 저장된 모드가 표준 모드(예: 시스템 설정에서 고른 1920×1080)면 에이전트가 ID 100으로 다시 바꾸고 설정에 저장한다. 한 번 저장되면 그다음부터는 WindowServer만으로 바뀐다.
+
+설치·확인·제거 (sudo 필요 없음, 로그 `~/Library/Logs/vvresize.log`):
+
+```bash
+scripts/vvresize-agent.sh install
+```
+
+```bash
+scripts/vvresize-agent.sh status
+```
+
+```bash
+scripts/vvresize-agent.sh uninstall
+```
+
+- 끄기: boot-arg `vvideo_autoresize=0` 또는 Info.plist `VVAutoResize` 0. 에이전트는 드라이버 설정을 따라 아무것도 하지 않는다.
+- 창 크기를 바꿀 때 화면이 한 번 깜박인다. 해상도가 바뀌기까지 약 1초 걸린다(저장된 모드가 표준 모드면 약 3초, 깜박임 2번).
+- 에이전트는 바꾼 모드를 디스플레이 설정에 저장한다. 시스템 설정에서 해상도를 고르면 그 값이 다시 저장된다.
+- 상태: `scripts/vvstat.sh`의 `auto resize` 줄 (`on handler=enabled connect-changes=N last=WxH`).
 
 ## 6. 드라이버를 끄거나 빼는 방법
 
@@ -238,6 +267,7 @@ sudo shutdown -r now
 | `config.plist.bak-20261125-wi4001`    | WI-4.001 소프트웨어 커서 시험 전  | boot-args `keepsyms=1` |
 | `config.plist.bak-20261125-minimize` | 최소화 IONDRV 비교 전             | boot-args `keepsyms=1` |
 | `config.plist.bak-20261125-wi5010`   | WI-5.010 AC-05·06 재부팅 시험 전  | boot-args `keepsyms=1` |
+| `config.plist.bak-20261125-wi6001`   | WI-6.001 자동 전환 끄기 시험 전   | boot-args `keepsyms=1` |
 
 위 표에서 `wi2004-redo`를 뺀 백업은 2026-11-24 호스트 스냅샷 "WI-001" 복구로 EFI에서 사라졌다 ([WI-2.004.md](WI-2.004.md)).
 

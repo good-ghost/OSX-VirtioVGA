@@ -24,6 +24,7 @@ static const char *const kSummaryKeys[][2] = {
     {"VVDisplayPower", "display power"},
     {"VVCursor", "cursor"},
     {"VVDirtyStats", "dirty flush"},
+    {"VVAutoResizeState", "auto resize"},
     {"VVEdid", "edid"},
     {"VVEventCounters", "events"},
     {"VVRecoveries", "recoveries"},

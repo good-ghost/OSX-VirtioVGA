@@ -18,6 +18,11 @@ namespace {
 constexpr const char *kTakeoverBootArg = "vvideo_takeover";
 // 하드웨어 커서를 끄고 소프트웨어 커서를 쓴다 (REQ-051, WI-4.001).
 constexpr const char *kSoftwareCursorBootArg = "-vvideoswcursor";
+// 창 크기 자동 전환 (WI-6.001). boot-arg가 있으면 그것을, 없으면 GPU personality의 VVAutoResize를 쓴다. 0이면 끈다.
+constexpr const char *kAutoResizeBootArg = "vvideo_autoresize";
+constexpr const char *kAutoResizeProperty = "VVAutoResize";
+// 창을 끄는 동안 이벤트가 연달아 온다. 마지막 이벤트 뒤 이만큼 조용하면 연결 변경을 알린다.
+constexpr uint32_t kResizeSettleMs = 600;
 // 전원 상태 (IONDRVFramebuffer와 같은 3단계).
 constexpr unsigned long kPowerStateCount = 3;
 constexpr unsigned long kPowerStateIdle = 1;
@@ -52,6 +57,16 @@ bool softwareCursorForced()
 {
     int unused = 0;
     return PE_parse_boot_argn(kSoftwareCursorBootArg, &unused, sizeof(unused));
+}
+
+bool autoResizeEnabled(IOService *gpu)
+{
+    uint32_t value = 0;
+    if (PE_parse_boot_argn(kAutoResizeBootArg, &value, sizeof(value))) {
+        return value != 0;
+    }
+    auto *setting = OSDynamicCast(OSNumber, gpu->getProperty(kAutoResizeProperty));
+    return setting != nullptr && setting->unsigned32BitValue() != 0;
 }
 
 bool takeoverEnabled()
@@ -164,6 +179,20 @@ bool VirtioVideoFramebuffer::start(IOService *provider)
         return false;  // free()가 정리한다
     }
     trace("start-done");
+    mAutoResize = autoResizeEnabled(mGpu);
+    // 프레임버퍼의 getWorkLoop()는 start 시점에 null이었다(0.0.43 실측). 이미 있는 GPU 서비스의 워크루프에 붙인다.
+    IOWorkLoop *workLoop = mGpu->getWorkLoop();
+    mResizeTimer = IOTimerEventSource::timerEventSource(this, &VirtioVideoFramebuffer::resizeTimerFired);
+    if (mResizeTimer == nullptr || workLoop == nullptr || workLoop->addEventSource(mResizeTimer) != kIOReturnSuccess) {
+        // 자동 전환만 못 할 뿐 화면 출력에는 지장이 없으므로 시작은 계속한다.
+        VV_LOG_ERR("fb: resize timer unavailable, auto resize disabled");
+        if (mResizeTimer != nullptr) {
+            mResizeTimer->release();
+            mResizeTimer = nullptr;
+        }
+        mAutoResize = false;
+    }
+    publishAutoResize();
     mGpu->framebufferAttached(this, true);
     VV_LOG_INFO("fb: started %ux%u", mMode.width, mMode.height);
     vv::publishLog(mGpu);
@@ -208,6 +237,15 @@ void VirtioVideoFramebuffer::stop(IOService *provider)
         }
         mGpu->framebufferAttached(this, false);
     }
+    if (mResizeTimer != nullptr) {
+        mResizeTimer->cancelTimeout();
+        if (IOWorkLoop *workLoop = mGpu != nullptr ? mGpu->getWorkLoop() : nullptr; workLoop != nullptr) {
+            workLoop->removeEventSource(mResizeTimer);
+        }
+        mResizeTimer->release();
+        mResizeTimer = nullptr;
+    }
+    mConnectProc = nullptr;
     IOFramebuffer::stop(provider);
 }
 
@@ -455,12 +493,19 @@ void VirtioVideoFramebuffer::displayConfigChanged()
     if (mGpu == nullptr || mBuffer == nullptr) {
         return;
     }
-    const vv::display::ModeTable updated = vv::display::buildModeTable(mGpu->preferredMode(), mBuffer->length());
+    // 지금 쓰는 모드가 동적 모드(창 크기)고 새 크기가 표준 모드면, 지금 화면이 목록에서 빠지지 않게 남긴다 (WI-6.001).
+    const vv::display::ModeEntry *currentEntry = vv::display::findModeById(mModes, static_cast<uint32_t>(mCurrentModeId));
+    const vv::display::ModeEntry keep = currentEntry != nullptr ? *currentEntry : vv::display::ModeEntry{};
+    const vv::display::ModeTable updated =
+        vv::display::buildModeTable(mGpu->preferredMode(), mBuffer->length(), currentEntry != nullptr ? &keep : nullptr);
     const vv::display::ModeEntry *preferred = vv::display::findPreferredMode(updated);
-    // 현재 모드가 새 목록에 없으면(예: 이전 선호 해상도 ID 100이 다른 크기로 바뀜) 목록을 바꾸지 않는다.
-    // 현재 화면과 맞지 않는 목록을 보고하지 않기 위해서다. 모드를 바꾸는 것은 WI-6.001에서 다룬다.
+    // 현재 모드가 새 목록에 없거나 크기가 달라지면, 현재 화면과 맞지 않는 목록을 보고하게 된다. 이때는 목록을 바꾸지 않는다.
+    // 예외: 자동 전환이 켜져 있고 현재 모드가 동적 모드면 크기가 바뀌어도 바꾼다. 곧 연결 변경을 알려 IOGraphics가 목록을
+    // 다시 읽고 같은 ID로 setDisplayMode를 부른다(0.0.46 실측: 연결 변경 직후 EDID 기본 해상도 모드로 전환).
     const vv::display::ModeEntry *current = vv::display::findModeById(updated, static_cast<uint32_t>(mCurrentModeId));
-    if (current == nullptr || !(current->mode == mMode)) {
+    const bool dynamicResize = mAutoResize && mResizeTimer != nullptr && current != nullptr &&
+                               vv::display::isDynamicModeId(current->id);
+    if (current == nullptr || (!(current->mode == mMode) && !dynamicResize)) {
         VV_LOG_INFO("fb: display changed, preferred %ux%u; current mode %d not in new list, keeping list",
                     preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0,
                     static_cast<int>(mCurrentModeId));
@@ -474,6 +519,86 @@ void VirtioVideoFramebuffer::displayConfigChanged()
     VV_LOG_INFO("fb: display changed, mode list rebuilt (%u modes, preferred %ux%u)", static_cast<unsigned>(mModes.count),
                 preferred != nullptr ? preferred->mode.width : 0, preferred != nullptr ? preferred->mode.height : 0);
     trace("displayChanged-rebuilt");
+    // 게스트가 모드를 바꾸면 QEMU가 창을 그 크기로 맞추고 같은 크기로 이벤트를 보낸다(0.0.42 실측). 그때는 알릴 것이 없다.
+    if (preferred == nullptr || preferred->mode == mMode) {
+        return;
+    }
+    if (!mAutoResize || mResizeTimer == nullptr) {
+        VV_LOG_INFO("fb: auto resize off, not announcing %ux%u", preferred->mode.width, preferred->mode.height);
+        return;
+    }
+    mResizeTarget = preferred->mode;
+    mResizeTimer->setTimeoutMS(kResizeSettleMs);  // 이벤트가 더 오면 다시 기다린다
+}
+
+void VirtioVideoFramebuffer::resizeTimerFired(OSObject *owner, IOTimerEventSource *)
+{
+    auto *self = OSDynamicCast(VirtioVideoFramebuffer, owner);
+    if (self == nullptr || self->mGpu == nullptr) {
+        return;
+    }
+    if (self->mConnectProc == nullptr || !self->mConnectEnabled) {
+        VV_LOG_INFO("fb: no connect-change handler registered, cannot announce %ux%u", self->mResizeTarget.width,
+                    self->mResizeTarget.height);
+    } else {
+        ++self->mConnectChanges;
+        VV_LOG_INFO("fb: connect change for window size %ux%u", self->mResizeTarget.width, self->mResizeTarget.height);
+        self->trace("connectChange");
+        self->mConnectProc(self->mConnectTarget, self->mConnectRef);
+    }
+    self->publishAutoResize();
+    vv::publishLog(self->mGpu);
+}
+
+void VirtioVideoFramebuffer::publishAutoResize()
+{
+    if (mGpu == nullptr) {
+        return;
+    }
+    char summary[96];
+    snprintf(summary, sizeof(summary), "%s handler=%s connect-changes=%u last=%ux%u", mAutoResize ? "on" : "off",
+             mConnectProc == nullptr ? "none" : (mConnectEnabled ? "enabled" : "disabled"), mConnectChanges,
+             mResizeTarget.width, mResizeTarget.height);
+    mGpu->setProperty("VVAutoResizeState", summary);
+}
+
+IOReturn VirtioVideoFramebuffer::registerForInterruptType(IOSelect interruptType, IOFBInterruptProc proc,
+                                                          OSObject *target, void *ref, void **interruptRef)
+{
+    trace("regInt", interruptType);
+    if (interruptType != kIOFBConnectInterruptType) {
+        return IOFramebuffer::registerForInterruptType(interruptType, proc, target, ref, interruptRef);
+    }
+    if (proc == nullptr || interruptRef == nullptr) {
+        return kIOReturnBadArgument;
+    }
+    mConnectTarget = target;
+    mConnectRef = ref;
+    mConnectProc = proc;
+    mConnectEnabled = true;
+    *interruptRef = &mConnectProc;  // 이 등록을 가리키는 표식. unregister·setInterruptState에서 비교한다
+    publishAutoResize();
+    return kIOReturnSuccess;
+}
+
+IOReturn VirtioVideoFramebuffer::unregisterInterrupt(void *interruptRef)
+{
+    if (interruptRef != &mConnectProc) {
+        return IOFramebuffer::unregisterInterrupt(interruptRef);
+    }
+    mConnectProc = nullptr;
+    mConnectEnabled = false;
+    publishAutoResize();
+    return kIOReturnSuccess;
+}
+
+IOReturn VirtioVideoFramebuffer::setInterruptState(void *interruptRef, UInt32 state)
+{
+    if (interruptRef != &mConnectProc) {
+        return IOFramebuffer::setInterruptState(interruptRef, state);
+    }
+    mConnectEnabled = state != 0;
+    return kIOReturnSuccess;
 }
 
 IOReturn VirtioVideoFramebuffer::setCursorImage(void *cursorImage)

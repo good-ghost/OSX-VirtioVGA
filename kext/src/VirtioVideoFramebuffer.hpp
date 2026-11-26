@@ -12,6 +12,7 @@
 // VirtioGpuDevice가 IONDRV를 내리고 매칭을 다시 돌린다 (VirtioGpuDeviceTakeover.cpp).
 #pragma once
 
+#include <IOKit/IOTimerEventSource.h>
 #include <IOKit/graphics/IOFramebuffer.h>
 
 #include "vv/DisplayMode.hpp"
@@ -61,8 +62,15 @@ public:
                          UInt8 *data, IOByteCount *length) override;
 
     // 디스플레이 변경 이벤트 뒤 GPU 서비스가 부른다 (WI-3.005). 선호 해상도가 바뀌었으면 모드 목록을 다시 만든다.
-    // IOGraphics에 연결 변경을 알려 즉시 다시 읽게 하는 것은 아직 하지 않는다 (창 크기 자동 전환은 WI-6.001).
+    // 창 크기 자동 전환(WI-6.001)이 켜져 있고 새 크기가 현재 모드와 다르면, 이벤트가 멎은 뒤 IOGraphics에 연결
+    // 변경을 알려 모드 목록을 다시 읽게 한다.
     void displayConfigChanged();
+    // 연결 변경 콜백 (WI-6.001). IOGraphics는 kIOFBConnectInterruptType으로 콜백을 등록하고, 드라이버가 그것을
+    // 부르면 연결을 다시 감지하며 모드 목록을 새로 읽는다. 다른 종류(VBL 등)는 기본 클래스에 맡긴다.
+    IOReturn registerForInterruptType(IOSelect interruptType, IOFBInterruptProc proc, OSObject *target, void *ref,
+                                      void **interruptRef) override;
+    IOReturn unregisterInterrupt(void *interruptRef) override;
+    IOReturn setInterruptState(void *interruptRef, UInt32 state) override;
 
 private:
     static VirtioGpuDevice *findGpuDevice(IOService *pci);
@@ -91,5 +99,16 @@ private:
     vv::display::ModeTable mModes{};       // 보고하는 모드 목록 (WI-3.001)
     IODisplayModeID mCurrentModeId = 0;
     IODisplayModeID mStartupModeId = 0;    // 장치 선호 해상도의 모드
+    // 창 크기 자동 전환 (WI-6.001, REQ-043)
+    static void resizeTimerFired(OSObject *owner, IOTimerEventSource *sender);
+    void publishAutoResize();
+    IOTimerEventSource *mResizeTimer = nullptr;
+    IOFBInterruptProc mConnectProc = nullptr;
+    OSObject *mConnectTarget = nullptr;
+    void *mConnectRef = nullptr;
+    bool mConnectEnabled = false;
+    bool mAutoResize = false;
+    vv::display::Mode mResizeTarget{};     // 마지막으로 알린(알릴) 창 크기
+    uint32_t mConnectChanges = 0;          // 연결 변경을 알린 횟수
     bool mScanoutStarted = false;
 };

@@ -46,3 +46,14 @@
 - 수락 기준의 녹화는 하지 않았다(게스트 녹화 불가). 사용자 육안 확인과 드라이버 로그로 판정했다.
 - 남은 것: 저장된 모드가 표준 모드일 때는 깜박임 2번(WindowServer 복원 → 에이전트). HiDPI 배율 모드를 쓰는 중에 창 크기를 바꿀 때의 동작은 확인하지 않았다(에이전트는 1:1 모드를 고른다).
 
+### WI-6.002 다중 scanout — 보류 (2026-11-25)
+
+- 호스트: `-device virtio-vga-gl,max_outputs=2`. 장치가 scanout 2개를 알린다. 1번은 호스트 GTK에서 그 탭(`virtio-vga-gl.1`)을 열 때 `enabled=1`이 되고 디스플레이 이벤트가 온다. 열기 전에는 0×0(off), 호스트 창에는 "Display output is not active".
+- 시험 구현(0.0.49~0.0.50, 커밋 안 함): 128 MiB 풀을 출력마다 64 MiB로 나누고, 켜진 추가 출력마다 `VirtioVideoOutput` nub을 만들어 같은 `VirtioVideoFramebuffer` 클래스를 하나 더 붙였다. 추가 출력은 자기 resource·전송 루프(전체 전송), 출력별 EDID, 커서는 보이는 출력의 scanout으로 보냈다.
+- 실측:
+  - 부팅 때 1번이 이미 켜져 있으면 두 화면 모두 그려졌다(`system_profiler` 모니터 2개, 출력 1 전송 오류 0). 다만 1번 프레임버퍼가 먼저 붙어 macOS가 주 디스플레이로 골랐다(0.0.50에서 순서를 고쳤으나 설치하지 못함).
+  - 부팅 뒤 탭을 열어 새로 붙은 프레임버퍼에는 IOGraphics가 아무것도 묻지 않았다(호출 기록 `start start-done`뿐, `enableController` 없음). 실행 중 새 IOFramebuffer는 WindowServer가 열지 않는 것으로 보인다.
+  - 두 출력 상태에서 키보드 입력이 되지 않았고, 사과 메뉴 재시작 중 두 화면이 검게 멈췄으며, GTK "Detach Tab" 때 화면이 꺼졌다. 원인은 확인하지 못했다.
+- 결정: 사용자 결정으로 보류하고 0.0.48로 되돌렸다. 시험 코드는 `git stash`("WI-6.002 multi-output WIP")에 보관했다. 호스트 `max_outputs`는 1로 되돌리는 것을 권한다.
+- 다시 시작한다면: 장치가 알린 scanout마다 부팅 때 프레임버퍼를 모두 만들고, 꺼진 출력은 연결 끊김(`kConnectionCheckEnable`)으로 보고하다가 켜질 때 연결 변경을 알리는 구조로 바꾼다. 키보드·재시작 멈춤은 따로 조사한다.
+

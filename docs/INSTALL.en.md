@@ -136,7 +136,7 @@ These are defaults set by installing the kext alone, without editing the EFI. Th
 
 | Key | Default | Meaning |
 | -- | ---- | ---- |
-| `VVCursorScale` | 50 | Hardware cursor size (%). QEMU GTK draws the cursor without the window scale factor. 50 is correct when viewing a HiDPI guest (2560×1600) in a 1280×800 host window. 100 when viewing the window 1:1 (WI-4.001) |
+| `VVCursorScale` | 100 | Hardware cursor size (%). QEMU GTK draws the cursor without the window scale factor. When a HiDPI guest (2560×1600) is shown at half size, such as in a 1280×800 host window, set 50 (boot-arg `vvideo_cursor_scale=50`). Default 100 since 0.9.1 (WI-4.001) |
 | `VVDirtyFlush` | 0 | Transfer only changed regions. Measurements showed no gain on the host and only increased guest CPU, so it is off |
 | `VVDirtyTile` | 64 | Change detection tile size |
 | `VVAutoResize` | 1 | Automatic host window-size switching (§5.4). With 0, the mode list is not changed even when the window size changes |

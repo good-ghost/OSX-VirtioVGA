@@ -28,7 +28,7 @@ IORegistry 속성만 읽습니다(root 불필요). 종료 코드 0이면 `driver
 | `mode` | `VVCurrentMode` | `2560x1600 changes=1` | 해상도와 전환 횟수 |
 | `scanout` | `VVScanout` | `running … flush-errors=0 blanks=0` | `flush-errors`가 늘면 전송 실패(resource를 다시 만듭니다). `blanks`는 디스플레이 잠자기 횟수 |
 | `display power` | `VVDisplayPower` | `on sleeps=N wakes=N` | 잠자기·깨우기 횟수가 같아야 합니다. 한 번도 안 잤으면 `-` |
-| `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=50` | `drops`(인터럽트 문맥 등으로 버린 이동), `rejects`(64×64 초과 이미지) |
+| `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=100` | `drops`(인터럽트 문맥 등으로 버린 이동), `rejects`(64×64 초과 이미지) |
 | `dirty flush` | `VVDirtyStats` | `on=0 …` | 변경 감지 전송 통계 (기본 꺼짐) |
 | `auto resize` | `VVAutoResizeState` | `on handler=enabled connect-changes=N last=WxH` | 창 크기 자동 전환 (INSTALL §5.4). `handler=none`이면 IOGraphics가 연결 변경 콜백을 등록하지 않은 것 |
 | `edid` | `VVEdid` | `ok size=1024` | `invalid:…`이면 장치가 준 EDID를 거절 |

@@ -28,7 +28,7 @@ Reads IORegistry properties only (no root needed). Exit code 0 means `driver-ok`
 | `mode` | `VVCurrentMode` | `2560x1600 changes=1` | Resolution and number of switches |
 | `scanout` | `VVScanout` | `running … flush-errors=0 blanks=0` | If `flush-errors` increases, transfers are failing (the resource is recreated). `blanks` is the number of display sleeps |
 | `display power` | `VVDisplayPower` | `on sleeps=N wakes=N` | The sleep and wake counts should be equal. `-` if it has never slept |
-| `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=50` | `drops` (moves discarded because of interrupt context, etc.), `rejects` (images larger than 64×64) |
+| `cursor` | `VVCursor` | `… drops=0 rejects=0 scale=100` | `drops` (moves discarded because of interrupt context, etc.), `rejects` (images larger than 64×64) |
 | `dirty flush` | `VVDirtyStats` | `on=0 …` | Change-detection transfer statistics (off by default) |
 | `auto resize` | `VVAutoResizeState` | `on handler=enabled connect-changes=N last=WxH` | Automatic switching to the window size (INSTALL §5.4). `handler=none` means IOGraphics did not register the connection change callback |
 | `edid` | `VVEdid` | `ok size=1024` | `invalid:…` means the EDID given by the device was rejected |

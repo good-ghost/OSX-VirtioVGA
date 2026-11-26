@@ -242,7 +242,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-5.007  | 배경화면·투명 효과 전후 비교 기록                   | 1       |
 | [X]    | WI-5.008  | 상태 조회 CLI                                       | 1       |
 | [X]    | WI-5.009  | 설치·운영 문서와 라이선스                           | 0.5     |
-| [ ]    | WI-5.010  | 인수 기준 최종 점검                                 | 1       |
+| [X]    | WI-5.010  | 인수 기준 최종 점검                                 | 1       |
 
 - WI-5.001
   - [X] 일반 작업·동영상 재생 24시간에서 패닉 0회 (NFR-001), 결과를 기록했다 — **12시간으로 줄여 시험하고 한계와 함께 인정(사용자 결정 2026-11-25)**: 0.0.42, 가동 12:19 동안 새 패닉 0, flush-errors·timeouts·device-errors·recoveries 0, 객체 수 변화 없음, 디스플레이 잠자기·깨우기 3회 정상. 한계: 화면이 켜져 쓰인 시간은 약 43분이고 나머지는 디스플레이 잠자기 상태, 고정 메모리 +약 299 MiB(원인 미확인) (`docs/research/p5-soak.log`)
@@ -267,7 +267,8 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] `docs/INSTALL.md`, `docs/DEBUGGING.md`가 최신이다 — INSTALL: 보조 KC 설치를 본 절차로, OpenCore 일회 설정·boot-args 12개·Info.plist 기본값·끄기·복구·알려진 제약 정리. DEBUGGING: `vvstat` 해석표, 개발 중 패닉 목록. README 갱신
   - [X] MIT `LICENSE` 파일을 사용자가 정한 저작권자 이름으로 추가했다 — `Copyright (c) 2026 good-ghost`
 - WI-5.010
-  - [ ] AC-01~AC-09를 모두 다시 확인하고 결과 표를 남겼다, 시연 녹화를 `docs/movie/`에 남겼다
+  - [X] AC-01~AC-09를 모두 다시 확인하고 결과 표를 남겼다 — 0.0.42에서 AC-01·02·03·04·05·06·08(NFR-002)·09 재확인, AC-07·AC-08(NFR-001)은 0.0.42 기록 사용. 모두 통과(AC-08은 NFR-001 한계와 함께 인정) (`docs/ACCEPTANCE.md`, `docs/research/p5-acceptance.log`)
+  - [ ] 시연 녹화를 `docs/movie/`에 남겼다 — **사용자 결정으로 녹화 없이 마감(2026-11-25)**. 게스트 녹화 불가, 호스트 녹화 필요
 
 ### P6. 확장 (선택) — [PHASE-PLAN-06](phases/PHASE-PLAN-06.md)
 

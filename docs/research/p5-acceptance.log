@@ -1,0 +1,68 @@
+# WI-5.010 AC 재확인 2026-11-25 16:24:46, kext (0.0.42)
+## AC-01
++-o VirtioVideoFramebuffer  <class VirtioVideoFramebuffer, id 0x100000306, registered, matched, active, busy 0 (4 ms), retain 20>
++-o AppleMCCSControlModule  <class AppleMCCSControlModule, id 0x100000312, registered, matched, active, busy 0 (0 ms), retain 7>
+| +-o AppleMCCSParameterHandler  <class AppleMCCSParameterHandler, id 0x100000315, registered, matched, active, busy 0 (0 ms), retain 5>
++-o AppleUpstreamUserClientDriver  <class AppleUpstreamUserClientDriver, id 0x100000313, registered, matched, active, busy 0 (0 ms), retain 
++-o AGPM  <class AGPM, id 0x10000034b, registered, matched, active, busy 0 (0 ms), retain 8>
++-o display0  <class IODisplayConnect, id 0x10000036e, registered, matched, active, busy 0 (0 ms), retain 6>
+| +-o AppleDisplay  <class AppleDisplay, id 0x100000370, registered, matched, active, busy 0 (0 ms), retain 8>
++-o IOFramebufferUserClient  <class IOFramebufferUserClient, id 0x100000373, !registered, !matched, active, busy 0, retain 5>
++-o IOFramebufferSharedUserClient  <class IOFramebufferSharedUserClient, id 0x1000003a9, !registered, !matched, active, busy 0, retain 5>
+IONDRVFramebuffer count: 0
+## AC-02
+      VRAM (Total): 128 MB
+      Device ID: 0x1050
+          Resolution: 2560 x 1600
+      Vendor ID: 0x1af4
+## AC-03 (scripts/ac03-modes.swift)
+modes: 10
+1024x768 (pixels 1024x768) -> capture 1024x768 ok
+1280x800 (pixels 1280x800) -> capture 1280x800 ok
+1280x1024 (pixels 1280x1024) -> capture 1280x1024 ok
+720x450 (pixels 1440x900) -> capture 1440x900 ok
+800x450 (pixels 1600x900) -> capture 1600x900 ok
+840x525 (pixels 1680x1050) -> capture 1680x1050 ok
+960x540 (pixels 1920x1080) -> capture 1920x1080 ok
+960x600 (pixels 1920x1200) -> capture 1920x1200 ok
+1280x720 (pixels 2560x1440) -> capture 2560x1440 ok
+1280x800 (pixels 2560x1600) -> capture 2560x1600 ok
+restore 1280x800 -> ok
+failures=0
+  mode           2560x1600 changes=11
+  scanout        running resource=13 setups=12 flushes=17174 flush-errors=0 blanks=0
+## AC-08 NFR-002 재시험 (scripts/mode-switch-test.sh 100 1500, 상세는 p5-mode-switch.log)
+100/100 ok, 원래 모드 복원, failures=0, 패닉 0, flush-errors 0, timeouts 0, 객체 수 전후 같음(VVDmaBuffer 6, VirtioQueue 2, IOBufferMemoryDescriptor 339), wired 483590 -> 493638
+## AC-08 NFR-001: p5-soak.log (12시간, 한계와 함께 인정)
+## AC-09 재시험 (scripts/display-sleep-cycles.sh 10, 상세는 p4-display-sleep-ac09.log, 스크린샷 docs/screenshots/p4/)
+2026-11-25 16:32:05-16:53:08, 0.0.42: 10/10 ok, failures=0, 매 회차 로그인 뒤 캡처 2560x1600, flush-errors 0, sleeps=11 wakes=11 blanks=11(회차 외 자연 잠자기 1회 포함)
+panics: 5
+## AC-05 2026-11-25 16:55:55 boot-args: keepsyms=1 -vvideooff
+IONDRVFramebuffer: 1
+VirtioVideoFramebuffer: 0
+"VVNdrvBlocked" = "skipped:-vvideooff"
+VirtioGpuDevice: not found (driver not loaded, or disabled with -vvideooff)
+      VRAM (Total): 3 MB
+          Resolution: 1280 x 800
+panics: 5
+## AC-06 2026-11-25 16:57:50 boot-args: keepsyms=1 vvideo_fail=2
+IONDRVFramebuffer: 1
+VirtioVideoFramebuffer: 0
+"VVNdrvBlocked" = "restored:injected:bring-up"
+VirtioVideo kext: 0.0.42
+framebuffer: not attached (IONDRV or none)
+  init           injected:bring-up
+  mode           -
+  6 I transport: region bar=2 off=0x1800 len=0x800
+  7 I transport: region bar=2 off=0x2000 len=0x1000
+  8 I transport: notify multiplier=4
+  9 I gpu: interrupt sources 0:msix
+  10 I gpu: irq requested=msix effective=msix (msix sources=1, legacy index=-1)
+  11 I gpu: MSI-X shared vector 0, 1 event source(s)
+  12 E gpu: init failed: injected:bring-up
+  13 E gpu: our display path unavailable (injected:bring-up), handing the screen back to IONDRV
+      VRAM (Total): 3 MB
+          Resolution: 1280 x 800
+panics: 5
+## AC-04 2026-11-25 17:01:21 (build/color-bands 45, scripts/color-bands.swift)
+게스트 전체 화면에 빨강·초록·파랑·흰색 세로 띠(WindowServer 경로). 사용자가 호스트 QEMU 창에서 왼쪽부터 빨강·초록·파랑·흰색 순서 정상 확인. 표시 중 flush-errors 0, device-errors 0, timeouts 0. 호스트 캡처 없음

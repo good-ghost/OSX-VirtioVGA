@@ -66,3 +66,14 @@ framebuffer: not attached (IONDRV or none)
 panics: 5
 ## AC-04 2026-11-25 17:01:21 (build/color-bands 45, scripts/color-bands.swift)
 게스트 전체 화면에 빨강·초록·파랑·흰색 세로 띠(WindowServer 경로). 사용자가 호스트 QEMU 창에서 왼쪽부터 빨강·초록·파랑·흰색 순서 정상 확인. 표시 중 flush-errors 0, device-errors 0, timeouts 0. 호스트 캡처 없음
+## REQ-062 2026-11-25 19:35:45 kext 0.0.51
+Graphics/Displays:
+
+    Virtio GPU:
+
+      Chipset Model: Virtio GPU
+      Type: GPU
+      VRAM (Total): 128 MB
+      Device ID: 0x1050
+      Revision ID: 0x0001
+      Displays:

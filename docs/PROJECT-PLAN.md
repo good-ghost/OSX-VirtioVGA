@@ -132,7 +132,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
 | [X]    | WI-2.004  | 2D resource 생명주기와 픽셀 형식                    | 1.5     |
 | [X]    | WI-2.005  | IOFramebuffer 하위 클래스 (고정 모드)               | 2.5     |
 | [X]    | WI-2.006  | 부트 프레임버퍼 대체 (매칭·probe score)             | 1.5     |
-| [ ]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
+| [X]    | WI-2.007  | 주기 flush 타이머                                   | 1       |
 | [X]    | WI-2.008  | 실패 경로와 자원 해제                               | 1       |
 | [X]    | WI-2.009  | 부트 화면 이어받기                                  | 1       |
 | [X]    | WI-2.010  | virtio-vga-gl 호환 시험                             | 0.5     |
@@ -159,7 +159,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 선택한 probe score와 근거를 기록했다 (점수 30000. 단 실제 대체는 점수가 아니라 보조 kext의 AAPL,iokit-ignore-ndrv로 이뤄짐, PHASE-PLAN-02)
 - WI-2.007
   - [X] 기본 60 Hz로 transfer + flush가 돈다, 주기는 설정으로 바뀐다 (0.0.24: boot-arg `vvideo_flush_ms`, `VVFlushIntervalMs=16`, flush-errors 0)
-  - [ ] 창 이동·타이핑이 화면에 반영된다 (녹화) — 사용자 육안 확인과 캡처만 있음. 게스트 `screencapture -V`는 capture error, 호스트 녹화 필요
+  - [X] 창 이동·타이핑이 화면에 반영된다 (~~녹화~~) — 사용자 육안 확인과 캡처로 판정. **녹화는 취소(사용자 결정 2026-11-25)**. 게스트 `screencapture -V`는 capture error
 - WI-2.008
   - [X] 디버그 옵션으로 초기화 각 단계 실패를 주입해도 부팅이 계속되고 `IONDRVFramebuffer`가 남는다 (AC-06) — 0.0.25: `vvideo_fail=1`(전송 계층)·`2`(장치 초기화)·`3`(프레임버퍼) 모두 IONDRV 복귀, 재차단 없음, 패닉 없음
   - [X] boot-arg `-vvideooff`로 기존 화면으로 부팅된다 (AC-05) — 0.0.25: 보조 kext `skipped:-vvideooff`, 본 kext 서비스 0개, IONDRV
@@ -200,7 +200,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] 모드를 바꾸고 재부팅하면 같은 모드로 시작한다 — 2560×1600 HiDPI가 0.0.27·0.0.28 재부팅 뒤 그대로 복원
 - WI-3.008
   - [X] `IOFBMemorySize`가 128 MiB다 (0.0.28: 134217728)
-  - [X] `system_profiler`의 VRAM 표시가 128 MB이고 "Kernel Extension Info"에 이 드라이버가 나온다 (AC-02) — VRAM 128 MB 확인. "Kernel Extension Info" 줄은 드라이버 적용 뒤 아예 표시되지 않음(REQ-062, S, 미충족으로 남김)
+  - [X] `system_profiler`의 VRAM 표시가 128 MB이고 "Kernel Extension Info"에 이 드라이버가 나온다 (AC-02) — VRAM 128 MB 확인. REQ-062는 v1.4에서 "'No Kext Loaded'가 사라지고 GPU 이름이 표시된다"로 바뀌었고 0.0.51에서 충족: "No Kext Loaded" 없음, 제목·"Chipset Model: Virtio GPU" (PCI `model` 속성, 2026-11-25)
   - [X] VRAM 표시에 쓰이는 속성을 조사한 결과를 기록했다 — IOGraphics가 getVRAMRange 길이로 IOFBMemorySize를 정하고 system_profiler가 그 값을 쓴다. 숫자 덮어쓰기는 무시됨 (PHASE-PLAN-03)
 - WI-3.009
   - [X] 협상 feature, scanout 수, 현재 모드, 큐 통계, 오류 수가 IORegistry에 보인다 — VVDeviceFeatures·VVDriverFeatures, VVDisplayInfo, VVCurrentMode, VVControlQueue·VVEventCounters, VVScanout
@@ -268,7 +268,7 @@ Metal 가속, Sequoia 배경, 투명 효과는 범위 밖이다 (REQUIREMENT §2
   - [X] MIT `LICENSE` 파일을 사용자가 정한 저작권자 이름으로 추가했다 — `Copyright (c) 2026 good-ghost`
 - WI-5.010
   - [X] AC-01~AC-09를 모두 다시 확인하고 결과 표를 남겼다 — 0.0.42에서 AC-01·02·03·04·05·06·08(NFR-002)·09 재확인, AC-07·AC-08(NFR-001)은 0.0.42 기록 사용. 모두 통과(AC-08은 NFR-001 한계와 함께 인정) (`docs/ACCEPTANCE.md`, `docs/research/p5-acceptance.log`)
-  - [ ] 시연 녹화를 `docs/movie/`에 남겼다 — **사용자 결정으로 녹화 없이 마감(2026-11-25)**. 게스트 녹화 불가, 호스트 녹화 필요
+  - [-] ~~시연 녹화를 `docs/movie/`에 남겼다~~ — **취소(사용자 결정 2026-11-25)**. 게스트 녹화 불가
 
 ### P6. 확장 (선택) — [PHASE-PLAN-06](phases/PHASE-PLAN-06.md)
 

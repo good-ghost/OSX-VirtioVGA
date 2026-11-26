@@ -189,5 +189,5 @@ AC-07 다섯 항목을 같은 방법으로 측정한다 (REQUIREMENT §2.5와 �
 - 0.0.42에서 다시 확인한 것: AC-01·02(ioreg·system_profiler), AC-03(`scripts/ac03-modes.swift`, 모드 10개 캡처 크기 일치), AC-04(`scripts/color-bands.swift`, 사용자가 호스트 창에서 확인), AC-05(`-vvideooff` 부팅), AC-06(`vvideo_fail=2` 부팅), AC-08 NFR-002(100회), AC-09(10회). 재부팅 시험 전 백업 `config.plist.bak-20261125-wi5010`, 끝난 뒤 boot-args `keepsyms=1`로 복귀.
 - AC-04는 `vvideo_test_pattern` 대신 WindowServer 경로의 색 띠로 확인했다. 시험 패턴은 WI-2.004 때 만든 것으로, 표시 뒤 장치를 reset해 드라이버가 화면을 맡은 지금 상태에서는 쓰지 않았다.
 - 관찰: CoreGraphics 모드 목록이 10개(픽셀 크기마다 하나, 큰 크기는 HiDPI)로 나왔다. WI-5.002 때는 17개(1:1과 HiDPI 모두). 원인 미확인. REQ-040 픽셀 크기 10개는 모두 있다.
-- 시연 녹화: 사용자 결정으로 녹화 없이 마감했다. WI-5.010 체크리스트의 녹화 항목은 미완료로 둔다.
+- 시연 녹화: 사용자 결정으로 녹화 없이 마감했고, 이후 녹화 자체를 취소했다(2026-11-25 "녹화는 없던일로 함"). M3 완료 조건의 녹화도 이에 따라 뺀다.
 

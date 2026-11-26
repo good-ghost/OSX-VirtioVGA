@@ -5,7 +5,7 @@
 | 항목      | 내용                                                         |
 | --------- | ------------------------------------------------------------ |
 | 문서      | `docs/REQUIREMENT.md`                                        |
-| 버전      | 1.3                                                          |
+| 버전      | 1.4                                                          |
 | 작성일    | 2026-11-23                                                   |
 | 상태      | 확정 — 모든 Open Question 답변 완료. 이후 변경은 변경 이력에 남긴다 |
 | 대상      | OSX-KVM 게스트 macOS용 virtio-gpu 2D 프레임버퍼 드라이버(kext) |
@@ -27,6 +27,7 @@
 | 1.1  | 2026-11-24 | ENHANCE | **Q-01 변경**(사용자 승인 "Yes, try it"): T-04 확정(IOGraphicsFamily 심볼을 쓰는 kext는 OC 주입으로 로드 불가)에 따라 `/Library/Extensions`(보조 kernel collection) 설치와 SIP 부분 해제(`csr-active-config` 0x201) 시험으로 전환. 근거 `docs/research/aux-kc-option-a.md`. REQ-070·071·073과 INSTALL.md는 시험 결과를 본 뒤 고친다 |
 | 1.2  | 2026-11-24 | ENHANCE | Q-01 변경 시험 성공으로 확정: SIP 0x201 + `/Library/Extensions`(보조 kernel collection) + `kmutil load -z`. REQ-070·071 설치·롤백 경로를 이 방식으로 바꿈 |
 | 1.3  | 2026-11-25 | ENHANCE | **NFR-003 변경**(사용자 승인 "Change to reboot"): 화면 사용 중 `kmutil unload`가 VM을 패닉 상태로 멈추게 함(WI-5.003). "언로드 후 재로드"를 "재부팅으로 교체"로 바꿈 |
+| 1.4  | 2026-11-25 | ENHANCE | **REQ-062 변경**(사용자 승인 "요구사항 문구 변경하고, 카드이름 'Virtio GPU' 사용"): `SPDisplaysReporter`에는 "Kernel Extension Info"의 값으로 "No Kext Loaded" 문구만 있고, 프레임버퍼가 IONDRV일 때만 그 줄을 보여 주는 것으로 보여 드라이버 이름을 표시할 수 없다. "No Kext Loaded"가 사라지는 것과 GPU 이름 표시로 바꿈 |
 
 ### 1.2 용어
 
@@ -269,7 +270,7 @@ BAR 해석은 ioreg `assigned-addresses` 인코딩을 읽은 것이다. 각 BAR�
 | ------- | --------------------------------------------------------------------------------------------------------- | ---- |
 | REQ-060 | `IOFBMemorySize`를 프레임버퍼 메모리 풀 크기로 보고한다                                                  | M |
 | REQ-061 | `system_profiler SPDisplaysDataType`의 "VRAM (Total)"이 REQ-060 값과 같게 표시되도록 필요한 레지스트리 속성을 조사해 설정한다. 어떤 속성을 읽는지는 아직 확인하지 못했다 | M |
-| REQ-062 | `system_profiler`의 "Kernel Extension Info"에 이 드라이버가 표시된다                                     | S |
+| REQ-062 | 드라이버를 적용하면 `system_profiler SPDisplaysDataType`의 "Kernel Extension Info: No Kext Loaded" 표시가 사라지고, GPU 이름("Chipset Model")이 `Virtio GPU`로 표시된다 | S |
 | REQ-063 | 드라이버 상태(협상한 feature, scanout 수, 현재 모드, 큐 통계, 오류 수)를 IORegistry 속성으로 공개한다    | S |
 | REQ-064 | 로그는 `os_log` 계열(또는 `IOLog`)로 남기고 수준(오류/정보/디버그)을 boot-arg 또는 Info.plist 설정으로 고른다 | M |
 

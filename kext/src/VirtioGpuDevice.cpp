@@ -30,6 +30,10 @@ using namespace vv::gpudevice;
 
 // 상태 감시 주기. 외부(Apple 전송 드라이버 등)가 장치를 reset하는지 보기 위한 것이라 촘촘할 필요가 없다.
 constexpr uint32_t kStatusWatchIntervalMs = 2000;
+// GPU 이름 (REQ-062 v1.4). system_profiler SPDisplaysDataType가 PCI 장치의 "model"을 "Chipset Model"과 제목으로
+// 보여 준다(SPDisplaysReporter 문자열 sppci_model). 펌웨어·OpenCore가 넣는 형식처럼 NUL로 끝나는 데이터로 둔다.
+constexpr const char *kModelProperty = "model";
+constexpr char kModelName[] = "Virtio GPU";
 // Poll 방식의 확인 주기 (디버그용이라 성능보다 단순함을 택했다).
 constexpr uint32_t kPollIntervalMs = 10;
 // 원하는 큐 크기. 장치 최대가 더 작으면 그에 맞춘다. 명령은 한 번에 하나씩 보내므로(REQ-024) 크게 둘 필요가 없다.
@@ -195,6 +199,12 @@ bool VirtioGpuDevice::start(IOService *provider)
         restoreNdrv("injected:framebuffer");
     } else if (!allocateFramebuffer(mPreferredMode)) {
         restoreNdrv("framebuffer");
+    } else if (mPci->getProperty(kModelProperty) == nullptr) {
+        // 우리가 화면을 맡을 때만 이름을 붙인다. OpenCore 등이 이미 넣은 이름은 덮어쓰지 않는다.
+        if (OSData *model = OSData::withBytes(kModelName, sizeof(kModelName)); model != nullptr) {
+            mPci->setProperty(kModelProperty, model);
+            model->release();
+        }
     }
     publishCounters();
     vv::publishLog(this);

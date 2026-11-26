@@ -124,7 +124,7 @@ WI-3.005 (WI-3.004 이후)
 - 판정 수정 후 128 MiB 물리 연속 풀 할당 성공: `VVFramebuffer = "… bytes=134217728 contiguous=1 dma-identity=1"`, `IOFBMemorySize = 134217728`.
 - `system_profiler`: **VRAM (Total): 128 MB**, Resolution 2560×1600, UI Looks like 1280×800, Online (`docs/research/2026-11-24-p3-system-profiler-displays.txt`). 처음 문제였던 "VRAM 3 MB"와 "해상도 고정"이 모두 해결됐다.
 - 원인 정리: 0.0.27은 할당·DMA는 성공했으나 `getPhysicalSegment(0)`가 첫 조각 길이만 돌려줘 비연속으로 오판. 조각을 끝까지 따라가게 고쳐 해결.
-- "Kernel Extension Info" 줄은 드라이버 적용 뒤 표시되지 않는다 (REQ-062, S). 원인 미조사.
+- "Kernel Extension Info" 줄은 드라이버 적용 뒤 표시되지 않는다 (REQ-062, S). 원인(2026-11-25 조사): `SPDisplaysReporter`에는 이 줄의 값으로 "No Kext Loaded" 문구만 있고, 프레임버퍼가 IONDRV(`com.apple.iokit.IONDRVSupport`)일 때만 보여 주는 것으로 보인다. REQ-062를 v1.4에서 "No Kext Loaded가 사라지고 GPU 이름이 표시된다"로 바꿨고, 0.0.51이 PCI 장치에 `model = "Virtio GPU"`를 붙여 제목과 "Chipset Model"에 표시된다.
 - 메모리: 128 MiB를 wired로 점유 (Q-03 결정대로).
 - 캡처: `docs/screenshots/p3/2026-11-24-p3-2560x1600-hidpi.png` (2560×1600).
 

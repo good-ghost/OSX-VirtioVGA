@@ -282,7 +282,7 @@ No deadline or overall duration constraint was given. Only man-day estimates for
   - [X] There is a setting to turn off automatic switching — Info.plist `VVAutoResize` (default 1); in a boot with boot-arg `vvideo_autoresize=0`, confirmed that resizing the window keeps the list, 0 connection changes, and the resolution unchanged
 - WI-6.002
   - [ ] With `max_outputs=2`, two monitors appear in System Settings and each produces output
-  - On hold (2026-11-25, user decision): in the trial implementation (0.0.49), a second output enabled at boot was drawn, but WindowServer did not open an output enabled at runtime, and with two outputs there were keyboard failure, a hang on restart, and the screen turning off when the tab was detached. Reverted to 0.0.48; the code is kept in `git stash` ("WI-6.002 multi-output WIP")
+  - On hold (2026-11-25, user decision): in the trial implementation (0.0.49), a second output enabled at boot was drawn, but WindowServer did not open an output enabled at runtime, and with two outputs there were keyboard failure, a hang on restart, and the screen turning off when the tab was detached. Reverted to 0.0.48; the trial code was not kept (deleted in the 2026-11-25 cleanup)
 
 ## 5. Requirements traceability
 

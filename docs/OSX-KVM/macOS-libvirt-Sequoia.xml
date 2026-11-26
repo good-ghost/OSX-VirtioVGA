@@ -1,0 +1,158 @@
+<!--
+  libvirt definition converted from the QEMU arguments of mac.sh (confirmed to boot normally on 2026-11-26).
+  The previous definition is in macOS-libvirt-Sequoia.xml.bak-20261126.
+  Apply: virsh -c qemu:///system define macOS-libvirt-Sequoia.xml
+-->
+<domain xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0" type="kvm">
+  <name>macOS</name>
+  <uuid>2aca0dd6-cec9-4717-9ab2-0b7b13d111c3</uuid>
+  <title>macOS</title>
+  <!-- mac.sh: -m 32768 -->
+  <memory unit="KiB">33554432</memory>
+  <currentMemory unit="KiB">33554432</currentMemory>
+  <!-- shared memory for Filesystem using virtiofsd -->
+  <memoryBacking>
+    <source type="memfd"/>
+    <access mode="shared"/>
+  </memoryBacking>
+  <!-- mac.sh: -smp 8,cores=2,sockets=1 (threads=4) -->
+  <vcpu placement="static">8</vcpu>
+  <os>
+    <!-- mac.sh: -machine pc-q35-10.0 -->
+    <type arch="x86_64" machine="pc-q35-10.0">hvm</type>
+    <loader readonly="yes" type="pflash" format="raw">$HOME/OSX-KVM/OVMF_CODE_4M.fd</loader>
+    <nvram format="raw">$HOME/OSX-KVM/OVMF_VARS-1920x1080.fd</nvram>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <!-- The actual CPU model is overridden by -cpu in qemu:commandline below. libvirt only handles the topology. -->
+  <cpu mode="custom" match="exact" check="none">
+    <model fallback="forbid">qemu64</model>
+    <topology sockets="1" dies="1" clusters="1" cores="2" threads="4"/>
+  </cpu>
+  <!-- mac.sh passes no timer options, so the QEMU defaults are used as is. -->
+  <clock offset="utc"/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <!-- mac.sh: MacHDD, qcow2, cache=writeback, aio=threads, bootindex=1 -->
+    <disk type="file" device="disk">
+      <driver name="qemu" type="qcow2" cache="writeback" io="threads"/>
+      <source file="$HOME/OSX-KVM/macOS.img"/>
+      <target dev="sda" bus="sata"/>
+      <boot order="1"/>
+      <address type="drive" controller="0" bus="0" target="0" unit="0"/>
+    </disk>
+    <controller type="sata" index="0">
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x1f" function="0x2"/>
+    </controller>
+    <controller type="pci" index="0" model="pcie-root"/>
+    <controller type="pci" index="1" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="1" port="0x8"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x0" multifunction="on"/>
+    </controller>
+    <controller type="pci" index="2" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="2" port="0x9"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x1"/>
+    </controller>
+    <controller type="pci" index="3" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="3" port="0xa"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x2"/>
+    </controller>
+    <controller type="pci" index="4" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="4" port="0xb"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x3"/>
+    </controller>
+    <controller type="pci" index="5" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="5" port="0xc"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x4"/>
+    </controller>
+    <controller type="pci" index="6" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="6" port="0xd"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x5"/>
+    </controller>
+    <controller type="pci" index="7" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="7" port="0xe"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x6"/>
+    </controller>
+    <controller type="pci" index="8" model="pcie-root-port">
+      <model name="pcie-root-port"/>
+      <target chassis="8" port="0xf"/>
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x02" function="0x7"/>
+    </controller>
+    <!-- mac.sh: -device qemu-xhci,id=xhci (instead of ehci/uhci) -->
+    <!-- Placed directly on the root bus (pcie.0) for the same reason as the video device. Behind a root port, the keyboard and mouse do not work in macOS (confirmed 2026-11-26). -->
+    <controller type="usb" index="0" model="qemu-xhci">
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x03" function="0x0"/>
+    </controller>
+
+    <filesystem type="mount" accessmode="passthrough">
+      <driver type="virtiofs"/>
+      <source dir="/home/&lt;user&gt;/Temp"/>
+      <target dir="Temp"/>
+      <!-- When a filesystem is added in libvirt it is attached at bus="0x01", slot="0x00",
+           but macOS only recognizes it at bus="0x00" slot="0x05" -->
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x05" function="0x0"/>
+    </filesystem>
+    <!-- To attach several filesystems, add each one with the <address> slot value increased by 1. -->
+    <!-- mac.sh: -netdev user,hostfwd=tcp::2222-:22 + virtio-net-pci, same MAC.
+         In libvirt, port forwarding on a user network works only with the passt backend. -->
+    <interface type="user">
+      <mac address="52:54:00:c9:18:27"/> 
+      <backend type="passt"/>
+      <portForward proto="tcp">
+        <range start="2222" to="22"/>
+      </portForward>
+      <model type="virtio"/>
+      <!-- Placed directly on the root bus (pcie.0), as in mac.sh. Behind a root port, virtio-net becomes
+           modern-only and Ethernet does not connect in macOS (2026-11-26). -->
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x04" function="0x0"/>
+    </interface>
+    <!-- mac.sh: -device usb-kbd,bus=xhci.0 -device usb-tablet,bus=xhci.0 -->
+    <input type="tablet" bus="usb"/>
+    <input type="keyboard" bus="usb"/>
+    <!-- mac.sh: -device virtio-vga-gl -display gtk,gl=on.
+         In libvirt this maps to SPICE GL (local only, listen none). View it with virt-manager/virt-viewer. -->
+    <graphics type="spice">
+      <listen type="none"/>
+      <gl enable="yes" rendernode="/dev/dri/renderD128"/>
+    </graphics>
+    <audio id="1" type="spice"/>
+    <!-- mac.sh: -device ich9-intel-hda -device hda-duplex -->
+    <sound model="ich9">
+      <codec type="duplex"/>
+      <audio id="1"/>
+    </sound>
+    <video>
+      <model type="virtio" heads="1" primary="yes">
+        <acceleration accel3d="yes"/>
+      </model>
+      <!-- Placed directly on the root bus (pcie.0), as in mac.sh. Behind a pcie-root-port, the screen changes to
+           "Display output is not active." after the boot loader (confirmed 2026-11-26). -->
+      <address type="pci" domain="0x0000" bus="0x00" slot="0x01" function="0x0"/>
+    </video>
+    <memballoon model="none"/>
+  </devices>
+  <qemu:commandline>
+    <qemu:arg value="-device"/>
+    <qemu:arg value="isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc"/>
+    <qemu:arg value="-smbios"/>
+    <qemu:arg value="type=2"/>
+    <!-- The -cpu string from mac.sh as is (including MY_OPTIONS) -->
+    <qemu:arg value="-cpu"/>
+    <qemu:arg value="Skylake-Client-v4,-hle,-pcid,-rtm,kvm=on,vendor=GenuineIntel,+invtsc,vmware-cpuid-freq=on,+ssse3,+sse4.2,+popcnt,+avx,+aes,+xsave,+xsaveopt,check"/>
+    <qemu:arg value="-gdb"/>
+    <qemu:arg value="tcp:127.0.0.1:1234"/>
+  </qemu:commandline>
+</domain>

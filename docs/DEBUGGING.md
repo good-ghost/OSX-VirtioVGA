@@ -138,7 +138,7 @@ OSX-KVM 실행 스크립트의 QEMU 인자에 `-gdb tcp:127.0.0.1:1234`를 넣�
 3. 호스트(`distrobox enter gen-dev`): `scp`로 가져와 풀어 주세요.
 
    ```bash
-   mkdir -p ~/vv-debug-host && cd ~/vv-debug-host && scp woomg@<게스트 IP>:Projects/VirtioVGA/build/debug-symbols/vv-debug-<UUID>.tar.gz . && tar -xzf vv-debug-<UUID>.tar.gz
+   mkdir -p ~/vv-debug-host && cd ~/vv-debug-host && scp <user>@<게스트 IP>:Projects/VirtioVGA/build/debug-symbols/vv-debug-<UUID>.tar.gz . && tar -xzf vv-debug-<UUID>.tar.gz
    ```
 
 ### 3.4 lldb 연결 (호스트) — 2026-11-23 확인

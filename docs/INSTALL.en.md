@@ -224,7 +224,7 @@ Shut down the VM and revert with `qemu-img snapshot -a` from §1. The EFI partit
 macOS keeps running, so add `-vvideooff` through Remote Login (SSH). Remote Login must be enabled on the guest (enabled as of 2026-11-24, guest IP `192.168.122.75`).
 
 ```bash
-ssh woomg@192.168.122.75
+ssh <user>@192.168.122.75
 ```
 
 In the guest shell (the user enters the password):

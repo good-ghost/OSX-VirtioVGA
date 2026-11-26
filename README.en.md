@@ -23,6 +23,7 @@ Metal (GPU acceleration) is out of scope. Transparency effects and wallpapers dr
 - macOS 15.x x86_64 (verified: 15.8.3 `24H241`), OpenCore 1.0.6. Verified to work together with Lilu 1.6.8 and WhateverGreen 1.6.7.
 - QEMU 10.0.13 `-device virtio-vga` (or `virtio-vga-gl`), GTK display
 - SIP `csr-active-config` 0x201 (only Kext Signing disabled)
+- Example host VM configurations: [docs/OSX-KVM/mac.sh](docs/OSX-KVM/mac.sh) for running from the command line, and [docs/OSX-KVM/macOS-libvirt-Sequoia.xml](docs/OSX-KVM/macOS-libvirt-Sequoia.xml) for virt-manager (libvirt). See [docs/NEW-VM-INSTALL.en.md §1.1](docs/NEW-VM-INSTALL.en.md) for how to use them.
 
 ## Installation
 
@@ -70,6 +71,7 @@ The documents directly under `docs/` have English versions (`*.en.md`) in the sa
 | `scripts/` | Build, testing, measurement, environment collection, panic summary |
 | `tests/` | Unit tests (`scripts/test.sh`) |
 | `docs/` | Requirements, plans, installation and debugging documents |
+| `docs/OSX-KVM/` | Example host VM configurations (`mac.sh`, `macOS-libvirt-Sequoia.xml`) |
 
 ## Status (2026-11-25, 0.9.0)
 

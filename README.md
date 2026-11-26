@@ -23,6 +23,7 @@ Metal(GPU 가속)은 범위 밖입니다. 투명 효과와 Metal로 그리는 �
 - macOS 15.x x86_64 (확인: 15.8.3 `24H241`), OpenCore 1.0.6. Lilu 1.6.8·WhateverGreen 1.6.7과 함께 쓸 수 있음을 확인했습니다.
 - QEMU 10.0.13 `-device virtio-vga`(또는 `virtio-vga-gl`), GTK 디스플레이
 - SIP `csr-active-config` 0x201(Kext Signing만 해제)
+- 호스트 VM 구성 예시: 명령줄 실행용 [docs/OSX-KVM/mac.sh](docs/OSX-KVM/mac.sh), virt-manager(libvirt)용 [docs/OSX-KVM/macOS-libvirt-Sequoia.xml](docs/OSX-KVM/macOS-libvirt-Sequoia.xml). 쓰는 방법은 [docs/NEW-VM-INSTALL.md §1.1](docs/NEW-VM-INSTALL.md)에 있습니다.
 
 ## 설치
 
@@ -70,6 +71,7 @@ packaging/build-pkg.sh
 | `scripts/`          | 빌드, 시험, 측정, 환경 수집, 패닉 요약                       |
 | `tests/`            | 단위 테스트 (`scripts/test.sh`)                              |
 | `docs/`             | 요구사항, 계획, 설치·디버깅 문서                             |
+| `docs/OSX-KVM/`     | 호스트 VM 구성 예시 (`mac.sh`, `macOS-libvirt-Sequoia.xml`)   |
 
 ## 상태 (2026-11-25, 0.9.0)
 

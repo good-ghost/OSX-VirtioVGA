@@ -18,6 +18,50 @@ VirtioVGA 0.9.0부터는 설치 패키지(`VirtioVGA-<버전>.pkg`)로 설치합
 - 패키지는 서명되지 않았습니다. 설치 중 macOS가 "확인되지 않은 개발자" 경고를 보일 수 있습니다.
 - 다중 모니터(`max_outputs` 2 이상)는 지원하지 않습니다. 장치가 출력을 여러 개 알려도 첫 번째 출력만 씁니다.
 
+### 1.1 호스트 VM 구성 예시 (OSX-KVM)
+
+[OSX-KVM](https://github.com/kholia/OSX-KVM)으로 VM을 만든다면 [OSX-KVM/](OSX-KVM/) 폴더의 예시를 쓸 수 있습니다. 둘 다 2026-11-26에 이 드라이버로 정상 부팅을 확인한 구성입니다.
+
+| 파일 | 쓰는 곳 | 내용 |
+| ---- | ------- | ---- |
+| [mac.sh](OSX-KVM/mac.sh) | 명령줄에서 QEMU 직접 실행 | `-device virtio-vga-gl`, `-display gtk,gl=on`, Sequoia·Tahoe용 CPU 모델(`Skylake-Client-v4`), SSH 포트 포워딩(호스트 2222 → 게스트 22) |
+| [macOS-libvirt-Sequoia.xml](OSX-KVM/macOS-libvirt-Sequoia.xml) | libvirt(virt-manager) | `mac.sh`와 같은 구성을 libvirt 도메인으로 옮긴 것. 화면은 SPICE GL(virtio, 3D 가속 켬)로 봅니다 |
+
+**명령줄 실행 (`mac.sh`)**
+
+1. `mac.sh`를 OSX-KVM 저장소 폴더에 복사합니다. 스크립트는 같은 폴더의 `OVMF_CODE_4M.fd`, `OVMF_VARS-1920x1080.fd`, `macOS.img`를 씁니다(`REPO_PATH`, `OVMF_DIR`).
+2. 메모리(`ALLOCATED_RAM`, 기본 32768 MiB)와 CPU 수(`CPU_CORES`, `CPU_THREADS`)를 호스트에 맞게 고칩니다.
+3. 호스트에서 한 번 실행해 둡니다(재부팅하면 다시 해야 합니다).
+
+   ```bash
+   echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs
+   ```
+
+4. 실행합니다.
+
+   ```bash
+   ./mac.sh
+   ```
+
+- `-gdb tcp:127.0.0.1:1234`는 커널 디버깅용입니다([DEBUGGING.md](DEBUGGING.md)). 쓰지 않으면 지워도 됩니다.
+- `-monitor stdio`라서 실행한 터미널이 QEMU 모니터가 됩니다.
+
+**virt-manager 사용 (`macOS-libvirt-Sequoia.xml`)**
+
+1. XML의 `$HOME/OSX-KVM/...` 경로 세 곳(`loader`, `nvram`, 디스크 `source`)을 실제 절대 경로로 바꿉니다. libvirt는 `$HOME` 같은 환경 변수를 풀어 주지 않습니다.
+2. `<filesystem>` 블록은 호스트 폴더(`/home/<user>/Temp`)를 virtiofs로 게스트에 공유하는 예시입니다. 쓰지 않으면 블록을 지우고, 쓰면 `source dir`를 자기 폴더로 바꿉니다.
+3. `<gl rendernode="/dev/dri/renderD128"/>`가 호스트의 GPU 렌더 노드와 맞는지 확인합니다(`ls /dev/dri`).
+4. 도메인을 등록합니다.
+
+   ```bash
+   virsh -c qemu:///system define macOS-libvirt-Sequoia.xml
+   ```
+
+5. virt-manager(또는 virt-viewer)에서 `macOS` VM을 엽니다.
+
+- 비디오, USB(xhci), 네트워크(virtio-net) 장치는 루트 버스(`pcie.0`)에 직접 둡니다. `pcie-root-port` 뒤에 두면 각각 "Display output is not active." 화면, 키보드·마우스 불능, Ethernet 연결 실패가 생겼습니다(XML 주석 참고).
+- 포트 포워딩(호스트 2222 → 게스트 22)은 libvirt에서 `passt` 백엔드로만 됩니다.
+
 ## 2. 호스트에서 디스크 스냅샷 만들기
 
 드라이버는 커널에서 동작합니다. 문제가 생기면 부팅이 되지 않을 수 있으므로, **VM을 끈 상태에서** 스냅샷을 먼저 만들어 주세요. 켜진 상태의 qcow2에 `qemu-img snapshot`을 쓰면 이미지가 손상될 수 있습니다.

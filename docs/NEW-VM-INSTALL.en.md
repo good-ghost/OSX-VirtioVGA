@@ -18,6 +18,50 @@ Starting with VirtioVGA 0.9.0, installation is done with an installer package (`
 - The package is not signed. macOS may show an "unidentified developer" warning during installation.
 - Multiple monitors (`max_outputs` 2 or more) are not supported. Even if the device reports several outputs, only the first output is used.
 
+### 1.1 Example host VM configuration (OSX-KVM)
+
+If you build the VM with [OSX-KVM](https://github.com/kholia/OSX-KVM), you can use the examples in the [OSX-KVM/](OSX-KVM/) folder. Both configurations were confirmed to boot normally with this driver on 2026-11-26.
+
+| File | Used for | Contents |
+| ---- | -------- | -------- |
+| [mac.sh](OSX-KVM/mac.sh) | Running QEMU directly from the command line | `-device virtio-vga-gl`, `-display gtk,gl=on`, CPU model for Sequoia/Tahoe (`Skylake-Client-v4`), SSH port forwarding (host 2222 → guest 22) |
+| [macOS-libvirt-Sequoia.xml](OSX-KVM/macOS-libvirt-Sequoia.xml) | libvirt (virt-manager) | The same configuration as `mac.sh`, converted to a libvirt domain. The screen is shown through SPICE GL (virtio, 3D acceleration on) |
+
+**Command line (`mac.sh`)**
+
+1. Copy `mac.sh` into your OSX-KVM repository folder. The script uses `OVMF_CODE_4M.fd`, `OVMF_VARS-1920x1080.fd` and `macOS.img` in the same folder (`REPO_PATH`, `OVMF_DIR`).
+2. Adjust the memory (`ALLOCATED_RAM`, default 32768 MiB) and the CPU counts (`CPU_CORES`, `CPU_THREADS`) for your host.
+3. Run this once on the host (repeat after every host reboot):
+
+   ```bash
+   echo 1 | sudo tee /sys/module/kvm/parameters/ignore_msrs
+   ```
+
+4. Start the VM:
+
+   ```bash
+   ./mac.sh
+   ```
+
+- `-gdb tcp:127.0.0.1:1234` is for kernel debugging ([DEBUGGING.en.md](DEBUGGING.en.md)). You can remove it if you do not need it.
+- Because of `-monitor stdio`, the terminal you start it from becomes the QEMU monitor.
+
+**virt-manager (`macOS-libvirt-Sequoia.xml`)**
+
+1. Replace the three `$HOME/OSX-KVM/...` paths in the XML (`loader`, `nvram`, and the disk `source`) with real absolute paths. libvirt does not expand environment variables such as `$HOME`.
+2. The `<filesystem>` block is an example that shares a host folder (`/home/<user>/Temp`) with the guest through virtiofs. Remove the block if you do not need it, or change `source dir` to your own folder.
+3. Check that `<gl rendernode="/dev/dri/renderD128"/>` matches your host GPU render node (`ls /dev/dri`).
+4. Register the domain:
+
+   ```bash
+   virsh -c qemu:///system define macOS-libvirt-Sequoia.xml
+   ```
+
+5. Open the `macOS` VM in virt-manager (or virt-viewer).
+
+- The video, USB (xhci) and network (virtio-net) devices sit directly on the root bus (`pcie.0`). Behind a `pcie-root-port` they caused, respectively, a "Display output is not active." screen, a non-working keyboard and mouse, and no Ethernet connection (see the XML comments).
+- Port forwarding (host 2222 → guest 22) works in libvirt only with the `passt` backend.
+
 ## 2. Create a disk snapshot on the host
 
 The driver runs in the kernel. If something goes wrong the system may not boot, so create a snapshot first **with the VM shut down**. Running `qemu-img snapshot` on a qcow2 while the VM is running can corrupt the image.

@@ -138,7 +138,7 @@ The host's lldb is in the distrobox container `gen-dev` (LLVM lldb 19.1.7, with 
 3. Host (`distrobox enter gen-dev`): fetch it with `scp` and extract it.
 
    ```bash
-   mkdir -p ~/vv-debug-host && cd ~/vv-debug-host && scp woomg@<guest IP>:Projects/VirtioVGA/build/debug-symbols/vv-debug-<UUID>.tar.gz . && tar -xzf vv-debug-<UUID>.tar.gz
+   mkdir -p ~/vv-debug-host && cd ~/vv-debug-host && scp <user>@<guest IP>:Projects/VirtioVGA/build/debug-symbols/vv-debug-<UUID>.tar.gz . && tar -xzf vv-debug-<UUID>.tar.gz
    ```
 
 ### 3.4 lldb connection (host) — confirmed 2026-11-23

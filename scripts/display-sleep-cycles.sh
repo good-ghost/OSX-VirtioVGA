@@ -25,7 +25,7 @@ screen_locked() {
 }
 
 mkdir -p "$SHOT_DIR" "${LOG:h}"
-print "# AC-09 시작 $(date '+%Y-%m-%d %H:%M:%S') kext=$(kmutil showloaded 2>/dev/null | awk '/local.virtiovideo.VirtioVideo /{print $7}')" | tee -a "$LOG"
+print "# AC-09 시작 $(date '+%Y-%m-%d %H:%M:%S') kext=$(kmutil showloaded 2>/dev/null | awk '/local.virtiovga.VirtioVGA /{print $7}')" | tee -a "$LOG"
 
 failures=0
 for (( i = 1; i <= CYCLES; i++ )); do

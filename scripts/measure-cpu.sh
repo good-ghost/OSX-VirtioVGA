@@ -12,7 +12,7 @@ readonly LOG="$ROOT/docs/research/p5-performance.log"
 
 samples=$(( SECONDS_TOTAL / INTERVAL_S + 1 ))
 resolution=$(system_profiler SPDisplaysDataType 2>/dev/null | awk -F': ' '/Resolution/{r=$2} /Looks like/{l=$2} END{print r " (looks like " l ")"}')
-if "$ROOT/scripts/vvstat.sh" >/dev/null 2>&1; then driver="virtiovideo"; else driver="iondrv-or-off"; fi
+if "$ROOT/scripts/vvstat.sh" >/dev/null 2>&1; then driver="virtiovga"; else driver="iondrv-or-off"; fi
 # 첫 표본은 누적값이라 버린다.
 result=$(top -l $samples -s $INTERVAL_S -o cpu -n 20 -stats pid,command,cpu 2>/dev/null | awk '
     /^CPU usage/ { n++; if (n > 1) { gsub(/%/, ""); user += $3; sys += $5; cpu++ } next }

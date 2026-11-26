@@ -24,7 +24,7 @@ snapshot() {  # snapshot <label>
 
 mkdir -p "${LOG:h}"
 {
-    print "# $(date '+%Y-%m-%d %H:%M:%S') mode switch test count=$COUNT interval=${INTERVAL_MS}ms kext=$(kmutil showloaded 2>/dev/null | awk '/local.virtiovideo.VirtioVideo /{print $7}')"
+    print "# $(date '+%Y-%m-%d %H:%M:%S') mode switch test count=$COUNT interval=${INTERVAL_MS}ms kext=$(kmutil showloaded 2>/dev/null | awk '/local.virtiovga.VirtioVGA /{print $7}')"
     snapshot before
     "$BIN" "$COUNT" "$INTERVAL_MS"
     print "mode-cycle exit=$?"

@@ -4,9 +4,9 @@
 # 사용자 영역에만 쓰므로 sudo가 필요 없다. 로그: ~/Library/Logs/vvresize.log
 set -eu
 readonly ROOT=${0:A:h:h}
-readonly LABEL=local.virtiovideo.vvresize
+readonly LABEL=local.virtiovga.vvresize
 readonly SRC="$ROOT/tools/vvresize.swift"
-readonly INSTALL_DIR="$HOME/Library/Application Support/VirtioVideo"
+readonly INSTALL_DIR="$HOME/Library/Application Support/VirtioVGA"
 readonly BIN="$INSTALL_DIR/vvresize"
 readonly PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 readonly LOG="$HOME/Library/Logs/vvresize.log"

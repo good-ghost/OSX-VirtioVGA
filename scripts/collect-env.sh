@@ -14,7 +14,7 @@ readonly RESEARCH_DIR="$ROOT/docs/research"
 readonly INFO_PLIST="$ROOT/kext/Info.plist"
 readonly VIRTIO_VENDOR_ID="1af4"
 readonly VIRTIO_GPU_DEVICE_ID="1050"
-readonly BUNDLE_ID_PATTERN="virtiovideo"
+readonly BUNDLE_ID_PATTERN="virtiovga"
 readonly LINE_WIDTH=240
 
 usage() {
@@ -78,7 +78,7 @@ collect() {
     | filter -iE "virtio|IOGraphics|IONDRV|Lilu|WhateverGreen|$BUNDLE_ID_PATTERN" \
     | cut -c1-200
 
-  section "VirtioVideo 드라이버 서비스 (Info.plist의 IOClass별)"
+  section "VirtioVGA 드라이버 서비스 (Info.plist의 IOClass별)"
   local classes
   classes="$(driver_classes)"
   if [ -z "$classes" ]; then

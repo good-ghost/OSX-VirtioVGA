@@ -18,8 +18,11 @@ namespace {
 namespace v = vv::virtio;
 using namespace vv::gpudevice;
 
+#if VV_DEBUG
 // 자체 시험(디버그 빌드)에서 일부러 쓰는 존재하지 않는 resource id. 우리가 만드는 id는 1부터 올라간다.
+// 릴리스 빌드에서는 쓰지 않으므로 정의도 디버그 빌드에만 둔다 (-Wunused-const-variable).
 constexpr uint32_t kSelfTestInvalidResourceId = 0xFFFFFFF0;
+#endif
 
 IOReturn toIOReturn(v::gpu::CommandResult result, IOReturn transportError)
 {

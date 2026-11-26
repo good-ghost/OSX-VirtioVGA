@@ -1,4 +1,0 @@
-2026-11-25 00:15:44 scene=static dirty=0 seconds=30 kernel_task_cpu=6.1 sent_mib=25188 full_equiv_mib=25188 partial=0 skipped=0 scan_us_avg=0
-2026-11-25 00:16:18 scene=static dirty=1 seconds=30 kernel_task_cpu=24.9 sent_mib=0 full_equiv_mib=22281 partial=1 skipped=1425 scan_us_avg=5206
-2026-11-25 00:19:31 scene=static dirty=0 seconds=30 kernel_task_cpu=6.2 sent_mib=25188 full_equiv_mib=25187 partial=0 skipped=0 scan_us_avg=5201
-2026-11-25 00:20:05 scene=static dirty=1 seconds=30 kernel_task_cpu=25.0 sent_mib=0 full_equiv_mib=22281 partial=1 skipped=1425 scan_us_avg=5246

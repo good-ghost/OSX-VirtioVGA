@@ -1,0 +1,20 @@
+VirtioVGA - virtio-gpu 2D display driver for macOS 15 guests on QEMU/KVM (OSX-KVM)
+
+This package installs:
+  - VirtioVGA.kext into /Library/Extensions (registered with kmutil; restart required)
+  - Tools into /Library/Application Support/VirtioVGA (opencore-setup.sh, uninstall.sh, vvstat, vvresize)
+  - The window-resize agent (/Library/LaunchAgents/local.virtiovga.vvresize.plist)
+
+Before you continue (new VM):
+  1. Take a disk snapshot of the VM on the host.
+  2. The VM must use QEMU "-device virtio-vga" (or virtio-vga-gl) and OpenCore.
+  3. After this installer finishes, run once in Terminal, then restart:
+       sudo "/Library/Application Support/VirtioVGA/opencore-setup.sh"
+     It backs up config.plist, copies VirtioVGANdrvBlocker.kext to EFI/OC/Kexts,
+     adds the Kernel > Add entry and sets csr-active-config to 0x201.
+
+The package is not signed. If macOS blocks it, open it with right-click > Open,
+or run: sudo installer -pkg VirtioVGA-<version>.pkg -target /
+
+이 패키지는 서명되지 않았습니다. 새 VM에서는 설치 후 위 opencore-setup.sh를 한 번 실행하고 재부팅해 주세요.
+자세한 내용: https://github.com/good-ghost/OSX-VirtioVGA (docs/NEW-VM-INSTALL.md)

@@ -1,5 +1,0 @@
-2026-11-25 02:01:20 label=driver-2560x1600-hidpi driver=virtiovideo resolution="2560 x 1600 (looks like 1280 x 800 @ 60.00Hz)" seconds=60 system_user+sys=44.9 kernel_task=7.6 WindowServer=84.5 samples=30
-2026-11-25 02:02:29 label=driver-1920x1080 driver=virtiovideo resolution="1920 x 1080 (1080p FHD - Full High Definition) (looks like 1920 x 1080 @ 60.00Hz)" seconds=60 system_user+sys=29.7 kernel_task=4.6 WindowServer=0.1 samples=30
-2026-11-25 02:03:37 label=driver-1280x800 driver=virtiovideo resolution="1280 x 800 (looks like 1280 x 800 @ 60.00Hz)" seconds=60 system_user+sys=29.4 kernel_task=3.8 WindowServer=0.0 samples=30
-2026-11-25 02:06:34 label=iondrv-1280x800 driver=iondrv-or-off resolution="1280 x 800 (looks like 1280 x 800)" seconds=60 system_user+sys=60.5 kernel_task=3.4 WindowServer=63.4 samples=30
-2026-11-25 02:07:42 label=iondrv-1280x800-repeat driver=iondrv-or-off resolution="1280 x 800 (looks like 1280 x 800)" seconds=60 system_user+sys=48.8 kernel_task=1.2 WindowServer=78.5 samples=30

@@ -5,25 +5,25 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>VirtioVideoNdrvBlocker</string>
+	<string>VirtioVGANdrvBlocker</string>
 	<key>CFBundleIdentifier</key>
-	<string>local.virtiovideo.NdrvBlocker</string>
+	<string>local.virtiovga.NdrvBlocker</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>VirtioVideoNdrvBlocker</string>
+	<string>VirtioVGANdrvBlocker</string>
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.2</string>
+	<string>0.9.0</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.2</string>
+	<string>0.9.0</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>VirtioVideoNdrvBlocker</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
-			<string>local.virtiovideo.NdrvBlocker</string>
+			<string>local.virtiovga.NdrvBlocker</string>
 			<key>IOClass</key>
 			<string>VirtioVideoNdrvBlocker</string>
 			<key>IOMatchCategory</key>

@@ -1,7 +1,7 @@
 // IONDRV 차단 보조 kext (WI-2.005, PHASE-PLAN-02 "DeviceProperties 방식 시험" 대안 H).
 //
 // 왜 필요한가:
-// - 본 kext(VirtioVideo)는 IOFramebuffer를 상속하므로 IOGraphicsFamily(시스템 collection)에 링크해야 하고,
+// - 본 kext(VirtioVGA)는 IOFramebuffer를 상속하므로 IOGraphicsFamily(시스템 collection)에 링크해야 하고,
 //   그래서 보조 collection으로 부팅 후반에 로드된다 (T-04). 그때는 IONDRVFramebuffer가 이미 GPU에 붙어 있다.
 // - 실행 중에 IONDRV를 종료하면 AppleUpstreamUserClient가 패닉할 수 있다 (2차 시도).
 // - IONDRVFramebuffer::probe는 PCI 장치에 AAPL,iokit-ignore-ndrv가 있으면 거절한다 (KDK 디스어셈블).

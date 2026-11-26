@@ -18,11 +18,11 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEFAULT_DSYM = ROOT / "build/VirtioVideo.kext.dSYM/Contents/Resources/DWARF/VirtioVideo"
+DEFAULT_DSYM = ROOT / "build/VirtioVGA.kext.dSYM/Contents/Resources/DWARF/VirtioVGA"
 DSYM_ARCHIVE = ROOT / "build/dsym-archive"  # scripts/build.sh가 <UUID>.dSYM으로 보관한다
-DWARF_SUBPATH = "Contents/Resources/DWARF/VirtioVideo"
+DWARF_SUBPATH = "Contents/Resources/DWARF/VirtioVGA"
 PANIC_DIR = pathlib.Path("/Library/Logs/DiagnosticReports")
-BUNDLE_ID = "local.virtiovideo.VirtioVideo"
+BUNDLE_ID = "local.virtiovga.VirtioVGA"
 SUMMARY_LINES = 3
 
 KEXT_RANGE_RE = re.compile(

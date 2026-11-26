@@ -26,5 +26,9 @@ docs/movie/raw/
 # OpenCore config.plist 사본 (SMBIOS 일련번호·MLB·UUID 포함 — 커밋 금지)
 docs/research/efi/
 
+# 측정·시험 스크립트 출력 (collect-env, soak-snapshot, mode-switch-test, measure-*, display-sleep-cycles)
+docs/research/
+docs/screenshots/
+
 # Python 캐시
 __pycache__/

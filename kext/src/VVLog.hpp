@@ -48,7 +48,7 @@ void publishLog(IOService *service);
 
 } // namespace vv
 
-#define VV_LOG_PREFIX "VirtioVideo: "
+#define VV_LOG_PREFIX "VirtioVGA: "
 
 #define VV_LOG_AT(level, osLogType, fmt, ...)                                         \
     do {                                                                              \

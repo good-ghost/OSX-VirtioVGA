@@ -164,7 +164,7 @@ void VirtioGpuDevice::deferredFramebufferMatch(thread_call_param_t owner, thread
 
 void VirtioGpuDevice::restoreNdrv(const char *reason)
 {
-    // 보조 kext(VirtioVideoNdrvBlocker)가 붙인 속성을 지우고 매칭을 다시 돌린다. IONDRV는 새로 붙기만 하므로
+    // 보조 kext(VirtioVGANdrvBlocker)가 붙인 속성을 지우고 매칭을 다시 돌린다. IONDRV는 새로 붙기만 하므로
     // 실행 중 종료(패닉 위험, PHASE-PLAN-02)와 달리 안전하다. start() 안에서도 부를 수 있도록 비동기로 등록한다.
     if (mPci == nullptr || mPci->getProperty(kIgnoreNdrvProperty) == nullptr) {
         return;

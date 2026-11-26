@@ -9,7 +9,7 @@ mkdir -p "${LOG:h}"
 {
     print "## $LABEL $(date '+%Y-%m-%d %H:%M:%S')"
     print "uptime: $(uptime | sed 's/^ *//')"
-    print "kext: $(kmutil showloaded 2>/dev/null | awk '/local.virtiovideo.VirtioVideo /{print $7}')"
+    print "kext: $(kmutil showloaded 2>/dev/null | awk '/local.virtiovga.VirtioVGA /{print $7}')"
     print "panic-reports: $(ls -1 /Library/Logs/DiagnosticReports/*.panic 2>/dev/null | wc -l | tr -d ' ') latest=$(ls -t /Library/Logs/DiagnosticReports/*.panic 2>/dev/null | head -1 | xargs basename 2>/dev/null)"
     print "classes: $(ioclasscount VirtioGpuDevice VirtioVideoFramebuffer VirtioQueue VVDmaBuffer)"
     print "wired-pages: $(vm_stat | awk '/Pages wired down/ {gsub(/\./,"",$4); print $4}')"

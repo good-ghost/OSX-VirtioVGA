@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # kext 두 개를 빌드한다.
-#   build/VirtioVideo.kext             본 드라이버 (kext/, 보조 kernel collection으로 설치)
-#   build/VirtioVideoNdrvBlocker.kext  IONDRV 차단 보조 kext (kext-helper/, OpenCore로 주입)
+#   build/VirtioVGA.kext               본 드라이버 (kext/, 보조 kernel collection으로 설치)
+#   build/VirtioVGANdrvBlocker.kext    IONDRV 차단 보조 kext (kext-helper/, OpenCore로 주입)
 # 왜 Xcode 프로젝트가 아닌가: .xcodeproj를 손으로 관리하지 않고 CLI만으로 재현 가능하게 빌드하기 위해서다
 # (Xcode 26.3에 kext 템플릿은 있다 — PHASE-PLAN-00 결정 기록 참고).
 #
@@ -127,8 +127,8 @@ main_sources=()
 for src in "$MAIN_SRC_DIR"/*.c "$MAIN_SRC_DIR"/*.cpp; do
   [ -e "$src" ] && main_sources+=("$src")
 done
-build_kext VirtioVideo "$ROOT/kext/Info.plist" "${main_sources[@]}"
+build_kext VirtioVGA "$ROOT/kext/Info.plist" "${main_sources[@]}"
 
 # 보조 kext는 IOGraphicsFamily에 의존하면 안 된다 (OpenCore 주입, T-04). 본 kext에서 kmod_info와 boot-arg 해석만 가져온다.
-build_kext VirtioVideoNdrvBlocker "$ROOT/kext-helper/Info.plist" \
+build_kext VirtioVGANdrvBlocker "$ROOT/kext-helper/Info.plist" \
   "$MAIN_SRC_DIR/KmodInfo.c" "$MAIN_SRC_DIR/VVBootArgs.cpp" "$ROOT"/kext-helper/src/*.cpp

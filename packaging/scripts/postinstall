@@ -1,0 +1,48 @@
+#!/bin/zsh
+# VirtioVGA pkg 설치 뒤 단계 (root로 실행됩니다). $3 = 설치 대상 볼륨.
+#   1. 0.9.0 이전 이름(VirtioVideo.kext)과 개발용 에이전트를 지웁니다. 두 드라이버가 같은 장치에 붙지 않게 하려는 것입니다.
+#   2. 본 kext를 보조 kernel collection에 등록합니다(kmutil load -z -p). 정상 결과는 Code 28 "requires a reboot"입니다.
+#   3. 로그인한 사용자 세션에 창 크기 자동 전환 에이전트를 올립니다.
+# OpenCore(EFI) 설정은 바꾸지 않습니다. 사용자가 opencore-setup.sh를 직접 실행합니다.
+set -u
+
+readonly TARGET=${3:-/}
+readonly KEXT=/Library/Extensions/VirtioVGA.kext
+readonly OLD_KEXT=/Library/Extensions/VirtioVideo.kext
+readonly AGENT_LABEL=local.virtiovga.vvresize
+readonly OLD_AGENT_LABEL=local.virtiovideo.vvresize
+readonly AGENT_PLIST=/Library/LaunchAgents/$AGENT_LABEL.plist
+readonly KMUTIL_REBOOT_REQUIRED=28
+
+if [[ $TARGET != / ]]; then
+    # 다른 볼륨에 설치하면 kmutil 등록과 에이전트 시작은 그 시스템에서 따로 해야 합니다.
+    print "VirtioVGA: target $TARGET is not the running system; skipping kmutil and agent start"
+    exit 0
+fi
+
+rm -rf "$OLD_KEXT"
+chown -R root:wheel "$KEXT"
+chmod -R go-w "$KEXT"
+chown root:wheel "$AGENT_PLIST"
+chmod 644 "$AGENT_PLIST"
+
+kmutil load -z -p "$KEXT"
+result=$?
+if (( result != 0 && result != KMUTIL_REBOOT_REQUIRED )); then
+    print "VirtioVGA: kmutil load failed ($result)"
+    exit $result
+fi
+
+console_user=$(stat -f %Su /dev/console)
+if [[ -n $console_user && $console_user != root ]]; then
+    uid=$(id -u "$console_user")
+    home=$(dscl . -read "/Users/$console_user" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+    for label in $OLD_AGENT_LABEL $AGENT_LABEL; do
+        launchctl bootout "gui/$uid/$label" 2>/dev/null
+        [[ -n $home ]] && rm -f "$home/Library/LaunchAgents/$label.plist"
+    done
+    launchctl bootstrap "gui/$uid" "$AGENT_PLIST" 2>/dev/null
+fi
+
+print "VirtioVGA: installed. Run opencore-setup.sh once (new VM), then restart."
+exit 0

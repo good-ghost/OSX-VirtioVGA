@@ -1,4 +1,4 @@
-// VirtioVideo 상태 조회 (WI-5.008). IORegistry 속성만 읽는다. user client를 열지 않고 아무것도 쓰지 않는다.
+// VirtioVGA 상태 조회 (WI-5.008). IORegistry 속성만 읽는다. user client를 열지 않고 아무것도 쓰지 않는다.
 //
 // 사용법: vvstat [--log N] [--all]
 //   기본: 드라이버 버전과 주요 상태 요약
@@ -162,7 +162,7 @@ static void printAll(io_registry_entry_t entry, const char *label)
 // 올라간 kext의 버전을 읽는다 (KextManager, 읽기 전용).
 static void printKextVersion(void)
 {
-    const void *ids[] = {CFSTR("local.virtiovideo.VirtioVideo")};
+    const void *ids[] = {CFSTR("local.virtiovga.VirtioVGA")};
     CFArrayRef identifiers = CFArrayCreate(kCFAllocatorDefault, ids, 1, &kCFTypeArrayCallBacks);
     CFDictionaryRef loaded = KextManagerCopyLoadedKextInfo(identifiers, NULL);
     CFRelease(identifiers);
@@ -174,7 +174,7 @@ static void printKextVersion(void)
         }
         CFRelease(loaded);
     }
-    printf("VirtioVideo kext: %s\n", version);
+    printf("VirtioVGA kext: %s\n", version);
 }
 
 int main(int argc, char **argv)

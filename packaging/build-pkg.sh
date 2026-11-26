@@ -71,5 +71,6 @@ cat > "$DISTRIBUTION" <<EOF
 EOF
 productbuild --distribution "$DISTRIBUTION" --resources "$ROOT/packaging/resources" --package-path "$PKG_DIR" "$PRODUCT"
 rm -f "$COMPONENT"
-shasum -a 256 "$PRODUCT" | tee "$PRODUCT.sha256"
+# 내려받은 사람이 같은 폴더에서 `shasum -a 256 -c`로 확인할 수 있게 파일 이름만 적는다(절대 경로를 넣지 않는다).
+(cd "$PKG_DIR" && shasum -a 256 "${PRODUCT:t}") | tee "$PRODUCT.sha256"
 print "built $PRODUCT"
